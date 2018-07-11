@@ -47,10 +47,6 @@ WaitForSafety:
 	JUMP   WaitForSafety
 	
 	
-
-	
-
-	
 WaitForUser:
 	; This loop will wait for the user to press PB3, to ensure that
 	; they have a chance to prepare for any movement in the main code.
@@ -72,11 +68,14 @@ WaitForUser:
 	
 	
 PID_Tuning:
-	IN	SWITCHES
-	AND Mask1
+	; This loop gives the user a menu interface to manually tune the the PI controller
+	LOAD   	PIDTUNING
+	OUT    	SSEG2      		 ; "PID" on seven-seg
+	IN		SWITCHES
+	AND 	Mask1
 	JPOS 	SET_KP	; Set proportianal gain if SW1 is on
-	IN SWITCHES
-	AND Mask2
+	IN 		SWITCHES
+	AND 	Mask2
 	JPOS	SET_KI	; Set integral gain if SW2 is on
 	IN		XIO
 	AND 	Mask0 
@@ -84,53 +83,70 @@ PID_Tuning:
 	JUMP	PID_Tuning	; Loop
 	
 SET_KP:
+	; This loop allow the user to set the proportional gain constant for the position controller
+	LOAD 	Kp
+	OUT 	SSEG1
+	LOAD   	PIDTUNEKP
+	OUT    	SSEG2      		 ; "Kp" on seven-seg
 	IN		XIO
 	AND		Mask2
 	JNEG	INC_KP ; Increment the Kp gain if KEY3 is pressed
 	IN 		XIO
 	AND		Mask1
 	JNEG	DEC_KP ; Decrement the Kp gain if KEY2 is pressed
-	IN	XIO
-	AND	Mask0
+	IN		XIO
+	AND		Mask0
 	JNEG	PID_Tuning ; Exit if KEY1 is pressed
-	JUMP SET_KP ; Loop
+	JUMP 	SET_KP ; Loop
 
 SET_KI:
+	; This loop allow the user to set the integral gain constant for the position controller
+	LOAD 	Ki
+	OUT 	SSEG1
+	LOAD   	PIDTUNEKI
+	OUT    	SSEG2      		 ; "Ki" on seven-seg
 	IN		XIO
 	AND		Mask2
 	JNEG	INC_KI ; Increment the Ki gain if KEY3 is pressed
 	IN 		XIO
 	AND		Mask1
 	JNEG	DEC_KI ; Decrement the Ki gain if KEY2 is pressed
-	IN	XIO
-	AND	Mask0
+	IN		XIO
+	AND		Mask0
 	JNEG	PID_Tuning ; Exit if KEY1 is pressed
-	JUMP SET_KI ; Loop
+	JUMP 	SET_KI ; Loop
 	
 INC_KP:
+	; Increment the proportional gain constant
 	LOAD Kp
 	ADD	 Incr
 	STORE Kp
+	OUT SSEG1
 	JUMP SET_KP
 	
 DEC_KP:
+	; Decrement the proportional gain constant
 	LOAD Kp
 	SUB	Incr
 	Store Kp
+	OUT SSEG1
 	JUMP SET_KP
 	
 INC_KI:
+	; Increment the integral gain constant
 	LOAD Ki
 	ADD	 Incr
 	STORE Ki
+	OUT SSEG1
 	JUMP SET_KI
 	
 DEC_KI:
+	; Decrement the integral gain constant
 	LOAD Ki
 	SUB	Incr
 	Store Ki
+	OUT SSEG1
 	JUMP SET_KI
-	
 
 	
 	
@@ -160,33 +176,34 @@ OUT    RESETPOS    ; reset odometer in case wheels moved after programming
 	
 
 
-; Determine initial distance from wall and store into setpoint register to be used with the control loops.
+	; Determine initial distance from wall and store into setpoint register to be used with the control loops.
 
 	LOAD   Mask0       
 	OR	   Mask2	   
 	OUT    SONAREN     ; enable sonar 0 and sonar 2
 	IN     DIST0       ; get sonar0 distance
 	OUT    SSEG1	   ; output to seven segment display
-	STORE  DIST_SP	   ; store value from ultrasonic sensor in desired lateral distance setpoint
 	OUT	   DIST_CMD	   ; sends distance setpoint to PI position controller
+	LOAD   Ki
+	OUT	   POS_Ki
+	LOAD   Kp
+	OUT	   POS_Kp
 
-; Intialize heading vector and velocity	
+	; Intialize heading vector and velocity	
 	LOADI  150		   
 	STORE  DVel
 	LOADI  0
 	STORE  DTheta
 	
-; Main Control Loop
-
-Loop:	
+	
+Loop:
+; Main Control Loop	
 	
 	IN 		THETA		;Take in current angular position
-	OUT		ANGLE_ACT	;Send current angular positon from odometrey to PI position controller
-	
+	OUT		THETA_ACT	;Send current angular positon from odometrey to PI position controller
 	
 	JUMP	GET_DIST
-		;IN     DIST0		;Take in sensor reading from sonar0
-		;OUT	DIST_ACT	;Send the distance reading as actual distance to PI position controller
+	
 RLoop:	;Header to return to main loop
 
 	IN		DIST2		;Take in the distance reading from the back wall
@@ -199,11 +216,24 @@ RLoop:	;Header to return to main loop
 ; This code retrieves the distance between the robot and the back wall,
 ; Accounting for angular comp
 GET_DIST:
-	LOAD 	ANGLE_ACT
-	JPOS	RFSonar
-	JNEG	LFSonar
+	LOAD 	THETA_ACT
+	JPOS	RFSonar ;Right offset angular compensation
+	JNEG	LFSonar ;Left offset angular compensation
+	IN		DIST0	;Input sonar 0 distance
+	OUT		DIST_ACT	;output the measured distance to the PI position controller
+	JUMP	RLoop	; return to main loop
 
-	JUMP	RLoop
+RFSonar:
+	;Add Code for angular compensation
+	IN		DIST0	;Input sonar 0 distance
+	OUT		DIST_ACT	;output the measured distance to the PI position controller
+	JUMP	RLoop	; return to main loop
+
+LFSonar:
+	;Add Code for angular compensation
+	IN		DIST0	;Input sonar 0 distance
+	OUT		DIST_ACT	;output the measured distance to the PI position controller
+	JUMP	RLoop	; return to main loop
 
 	
 ; This code is used to kill the robot at the end of the program	
@@ -223,7 +253,7 @@ Forever:
 	
 ; Timer ISR. Used to call the position loop control as well as the motor control api
 CTimer_ISR:
-	IN     PI_Theta  ; Calls Postion Control Feedback PI Loop and Returns Trim Offset
+	IN     PI_Theta  ;  Returns Steering Trim Offset from Postion Control Feedback PI Loop
 	STORE  DTheta    ; Store the adjusted theta value from the PI position controller into the desired heading for the velocity controller
 	CALL   ControlMovement  ;
 	RETI   ; return from ISR
@@ -831,9 +861,6 @@ I2CWCmd:  DW &H1190    ; write one i2c byte, read one byte, addr 0x90
 I2CRCmd:  DW &H0190    ; write nothing, read one byte, addr 0x90
 
 
-ANGLE_ACT:	DW 0
-DIST_SP:	DW 0
-DIST_ACT: DW 0
 
 ;***************************************************************
 ;* IO address space map
@@ -879,5 +906,10 @@ RIN:      EQU &HC8
 LIN:      EQU &HC9
 IR_HI:    EQU &HD0  ; read the high word of the IR receiver (OUT will clear both words)
 IR_LO:    EQU &HD1  ; read the low word of the IR receiver (OUT will clear both words)
+DIST_CMD: EQU &HD2	; write the position setpoint to the PI position controller
+THETA_ACT:EQU &HD3	; write the current angular position to the PI position controller
+PI_THETA: EQU &HD4	; read the adjusted control signal from the PI position controller
+POS_Ki:	  EQU &HD5	; write the integral gain to the PI controller
+POS_Kp:	  EQU &HD6 	; write the proportional gain to the PI controller
 
 
