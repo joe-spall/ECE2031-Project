@@ -199,14 +199,14 @@ OUT    RESETPOS    ; reset odometer in case wheels moved after programming
 Loop:
 ; Main Control Loop	
 	
-	IN 		THETA		;Take in current angular position
-	OUT		THETA_ACT	;Send current angular positon from odometrey to PI position controller
-	
-	JUMP	GET_DIST
-	
-RLoop:	;Header to return to main loop
+	IN 		THETA		; Take in current angular position
+	OUT		THETA_ACT	; Send current angular positon from odometrey to sonar 0 for angular complement
+	IN		DIST0		; Read compensated distance to left wall
+	OUT 	DIST		; Write to the PI Controller
+			
+	JUMP 	GET_DIST	; Get distance to back wall
 
-	IN		DIST2		;Take in the distance reading from the back wall
+RLoop:	
 	ADDI	-305		;Subtract 1ft in mm
 	JNEG	Die			;If the robot is within a foot of the back wall --> die
 	
@@ -214,26 +214,26 @@ RLoop:	;Header to return to main loop
 
 	
 ; This code retrieves the distance between the robot and the back wall,
-; Accounting for angular comp
+; Accounting for heading angle
 GET_DIST:
 	LOAD 	THETA_ACT
-	JPOS	RFSonar ;Right offset angular compensation
-	JNEG	LFSonar ;Left offset angular compensation
-	IN		DIST0	;Input sonar 0 distance
-	OUT		DIST_ACT	;output the measured distance to the PI position controller
-	JUMP	RLoop	; return to main loop
+	ADD		10		
+	JNEG	LFSonar 	;Left offset if less than -10 degrees
+	SUB		15
+	JPOS	RFSonar 	;Right offset if greater than +5 degrees
+	IN		DIST3		;Input sonar 3 distance if +-5 degrees off center
+	STORE	DIST_WALL	;Distance to back wall
+	JUMP	RLoop		; return to main loop
 
 RFSonar:
-	;Add Code for angular compensation
-	IN		DIST0	;Input sonar 0 distance
-	OUT		DIST_ACT	;output the measured distance to the PI position controller
-	JUMP	RLoop	; return to main loop
+	IN		DIST2		;Input sonar 2 distance
+	STORE	DIST_WALL	;Distance to back wall
+	JUMP	RLoop		; return to main loop
 
 LFSonar:
-	;Add Code for angular compensation
-	IN		DIST0	;Input sonar 0 distance
-	OUT		DIST_ACT	;output the measured distance to the PI position controller
-	JUMP	RLoop	; return to main loop
+	IN		DIST3		;Input sonar 3 distance
+	STORE	DIST_WALL	;Distance to back wall
+	JUMP	RLoop		; return to main loop
 
 	
 ; This code is used to kill the robot at the end of the program	
@@ -255,8 +255,8 @@ Forever:
 CTimer_ISR:
 	IN     PI_Theta  ;  Returns Steering Trim Offset from Postion Control Feedback PI Loop
 	STORE  DTheta    ; Store the adjusted theta value from the PI position controller into the desired heading for the velocity controller
-	CALL   ControlMovement  ;
-	RETI   ; return from ISR
+	CALL   ControlMovement  ; Control Movement API
+	RETI   			 ; return from ISR
 	
 	
 ; Control code.  If called repeatedly, this code will attempt
@@ -806,7 +806,12 @@ I2CError:
 ;***************************************************************
 ;* Variables
 ;***************************************************************
-Temp:     DW 0 ; "Temp" is not a great name, but can be useful
+Temp:     	DW 0 ; "Temp" is not a great name, but can be useful
+Ki:		  	DW 0;
+Kp: 	  	DW 0;
+DIST_WALL:	DW 0;
+DIST:		DW 0;
+
 
 ;***************************************************************
 ;* Constants
@@ -824,6 +829,9 @@ Seven:    DW 7
 Eight:    DW 8
 Nine:     DW 9
 Ten:      DW 10
+PIDTUNING: DW 0
+INCR:	  DW 0
+
 
 ; Some bit masks.
 ; Masks of multiple bits can be constructed by ORing these
@@ -889,27 +897,30 @@ UART_RDY: EQU &H98  ; UART status
 SONAR:    EQU &HA0  ; base address for more than 16 registers....
 DIST0:    EQU &HA8  ; the eight sonar distance readings
 DIST1:    EQU &HA9  ; ...
-DIST2:    EQU &HAA  ; ...
-DIST3:    EQU &HAB  ; ...
-DIST4:    EQU &HAC  ; ...
-DIST5:    EQU &HAD  ; ...
-DIST6:    EQU &HAE  ; ...
-DIST7:    EQU &HAF  ; ...
-SONALARM: EQU &HB0  ; Write alarm distance; read alarm register
-SONARINT: EQU &HB1  ; Write mask for sonar interrupts
-SONAREN:  EQU &HB2  ; register to control which sonars are enabled
-XPOS:     EQU &HC0  ; Current X-position (read only)
-YPOS:     EQU &HC1  ; Y-position
-THETA:    EQU &HC2 ; Current rotational position of robot (0-359)
-RESETPOS: EQU &HC3  ; write anything here to reset odometry to 0
-RIN:      EQU &HC8
-LIN:      EQU &HC9
-IR_HI:    EQU &HD0  ; read the high word of the IR receiver (OUT will clear both words)
-IR_LO:    EQU &HD1  ; read the low word of the IR receiver (OUT will clear both words)
-DIST_CMD: EQU &HD2	; write the position setpoint to the PI position controller
-THETA_ACT:EQU &HD3	; write the current angular position to the PI position controller
-PI_THETA: EQU &HD4	; read the adjusted control signal from the PI position controller
-POS_Ki:	  EQU &HD5	; write the integral gain to the PI controller
-POS_Kp:	  EQU &HD6 	; write the proportional gain to the PI controller
+DIST2:    	EQU &HAA  ; ...
+DIST3:    	EQU &HAB  ; ...
+DIST4:    	EQU &HAC  ; ...
+DIST5:    	EQU &HAD  ; ...
+DIST6:    	EQU &HAE  ; ...
+DIST7:    	EQU &HAF  ; ...
+SONALARM: 	EQU &HB0  ; Write alarm distance; read alarm register
+SONARINT: 	EQU &HB1  ; Write mask for sonar interrupts
+SONAREN:  	EQU &HB2  ; register to control which sonars are enabled
+XPOS:     	EQU &HC0  ; Current X-position (read only)
+YPOS:     	EQU &HC1  ; Y-position
+THETA:    	EQU &HC2 ; Current rotational position of robot (0-359)
+RESETPOS: 	EQU &HC3  ; write anything here to reset odometry to 0
+RIN:      	EQU &HC8
+LIN:      	EQU &HC9
+IR_HI:    	EQU &HD0  	; read the high word of the IR receiver (OUT will clear both words)
+IR_LO:   	EQU &HD1  	; read the low word of the IR receiver (OUT will clear both words)
+
+DIST_CMD: 	EQU &HD2	; write the position setpoint to the PI position controller
+THETA_ACT:	EQU &HD3	; write the current angular position to SONAR0
+PI_THETA: 	EQU &HD4	; read the adjusted control signal from the PI position controller
+POS_Ki:	  	EQU &HD5	; write the integral gain to the PI controller
+POS_Kp:	  	EQU &HD6 	; write the proportional gain to the PI controller
+DIST:		EQU	&HD7	; Write the distance to the left wall to the PI controller
+
 
 
