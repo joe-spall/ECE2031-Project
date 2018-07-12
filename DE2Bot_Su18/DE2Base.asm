@@ -82,62 +82,39 @@ Main:
 	
 
 
-; As a quick demo of the movement control, the robot is 
-; directed to
-; - turn in-place 90 degrees clockwise,
-; - start moving forward,
-; - stop once something gets closer than 2ft to sonar2, OR
-; - stop after traveling 4 ft.
+	LOADI  	0
+	STORE  	DVel        ; turn in-place (zero velocity)
+	STORE	DTheta
+	CALL 	orientA
+	JUMP	Die
 
-	LOADI  0
-	STORE  DVel        ; turn in-place (zero velocity)
-check5: LOAD   Mask5       ; defined below as 0b0100
-	OUT    SONAREN     ; enable sonar 5
-	STORE currDist		; storing current distance
-	OUT		SSEG1
-	SUB		maxDist
-	JPOS	move5
+orientA: 
+	LOAD   	Mask5       ; defined below as 0b0100
+	OUT    	SONAREN     ; enable sonar 5
+	IN		DIST5		; read sonar 5 distance
+	STORE 	currDist	; storing current distance
+ 	OUT		SSEG1		; debug
+ 	CALL	Wait1		; debug
+ 	LOAD	currDist	; might not need, for safety
+	SUB		maxDist		
+	JPOS	orientAMove	; above max, move
 	LOAD	currDist
 	SUB		minDist
-	JNEG	move5
-	JUMP   Die
-move5: LOAD DTheta
-	ADDI 5			; load theta = 5
-	STORE  DTheta      ; desired heading
-	ADDI   -361			; check if you already rotated 360
-	JPOS	Die
-	JUMP check5
-	; The robot should automatically start moving,
-	; trying to match these desired parameters.	
-Test1:  ; P.S. "Test1" is a terrible, non-descriptive label
-	CALL   GetThetaErr ; get the heading error
-	CALL   Abs         ; absolute value
-	OUT    LCD         ; useful debug info
-	ADDI   -5          ; check if within 5 degrees of target
-	JPOS   Test1       ; if not, keep testing
+	JNEG	orientAMove ; below min, move
+	RETURN				; if aligned, stop part A
+orientAMove: 
+	LOAD 	DTheta
+	OUT 	SSEG2
+	ADD 	orientADelt	; load theta = 5
+	STORE  	DTheta      ; desired heading
+	ADDI   	&HFE97		; check if you already rotated 360
+	JNEG 	orientA
+	RETURN				; if gone through 360deg, just stop part A
+
+orientB:	
 	
-	; the robot is now within 5 degrees of 270
 	
-	LOAD   Mask2       ; defined below as 0b0100
-	OUT    SONAREN     ; enable sonar 2
-	LOAD   FSlow       ; defined below as 100
-	STORE  DVel
-
-
-Test2:
-	IN     YPOS        ; get the Y position from odometry
-                       ; remember that the bot is moving -Y
-	ADD    Ft4         ; defined below as 4 ft in robot units
-	OUT    LCD         ; useful debug info
-	JNEG   Die         ; if past 4 ft, stop
 	
-	IN     DIST2       ; get sonar2 distance
-	OUT    SSEG1       ; useful debug info
-	ADDI   -610        ; 2ft in mm
-	JNEG   Die
-
-	JUMP   Test2       ; still going
-
 
 
 Die:
@@ -166,12 +143,10 @@ CTimer_ISR:
 ; Control code.  If called repeatedly, this code will attempt
 ; to control the robot to face the angle specified in DTheta
 ; and match the speed specified in DVel
-DTheta:    DW 0
-DVel:      DW 0
-currDist:   DW 0
-maxDist:	DW &H146C
-minDist:	DW &H117E
-currHeading: DW 0
+DTheta:    		DW 0
+DVel:      		DW 0
+
+
 ControlMovement:
 	LOADI  50          ; used for the CapValue subroutine
 	STORE  MaxVal
@@ -715,7 +690,12 @@ I2CError:
 ;***************************************************************
 ;* Variables
 ;***************************************************************
-Temp:     DW 0 ; "Temp" is not a great name, but can be useful
+Temp:			DW 0 ; "Temp" is not a great name, but can be useful
+currDist:		DW 0
+currHeading:	DW 0
+maxDist:		DW &H146C
+minDist:		DW &H117E
+orientADelt: 	DW &H000A
 
 ;***************************************************************
 ;* Constants
