@@ -85,21 +85,23 @@ Main:
 	LOADI  	0
 	STORE  	DVel        ; turn in-place (zero velocity)
 	STORE	DTheta
-	CALL 	orientA
+	;CALL 	orientAInit
+	CALL	orientBInit
 	JUMP	Die
 
-orientA: 
+orientAInit: 
 	LOAD   	Mask5       ; defined below as 0b0100
 	OUT    	SONAREN     ; enable sonar 5
+orientARun:
 	IN		DIST5		; read sonar 5 distance
-	STORE 	currDist	; storing current distance
+	STORE 	currDist5	; storing current distance
  	OUT		SSEG1		; debug
  	CALL	Wait1		; debug
- 	LOAD	currDist	; might not need, for safety
-	SUB		maxDist		
+ 	LOAD	currDist5	; might not need, for safety
+	SUB		maxDist5		
 	JPOS	orientAMove	; above max, move
-	LOAD	currDist
-	SUB		minDist
+	LOAD	currDist5
+	SUB		minDist5
 	JNEG	orientAMove ; below min, move
 	RETURN				; if aligned, stop part A
 orientAMove: 
@@ -108,11 +110,58 @@ orientAMove:
 	ADD 	orientADelt	; load theta = 5
 	STORE  	DTheta      ; desired heading
 	ADDI   	&HFE97		; check if you already rotated 360
-	JNEG 	orientA
+	JNEG 	orientARun
 	RETURN				; if gone through 360deg, just stop part A
 
-orientB:	
+orientBInit:	
+	LOAD 	Mask23		; Mask sonar 2 and 3, remove 5
+	OUT		SONAREN		; Enable sonar 2 and 3
+orientBRun:
+
 	
+; - Store factors in m16sA and m16sB.
+; - Call Mult16s
+; - Result is stored in mres16sH and mres16sL (high and low words).
+	
+
+
+
+; 
+; orientBStart:
+; 	LOADI 	0				; Zeroing out odometry 
+; 	STORE 	DVel
+; 	STORE	DTheta
+; 	OUT		RESETPOS
+; 	
+; 	LOAD	Mask2			; Starting the running average for Sensor 2
+; 	OUT 	SONAREN
+; 	IN 		DIST2
+; 	STORE	runningDist2
+; 	IN		DIST2
+; 	ADD		runningDist2
+; 	STORE   runningDist2
+; 	IN		DIST2
+; 	ADD		runningDist2
+; 	STORE	runningDist2
+; 	
+; 	
+; runAveDist2:
+; 	LOAD 	runningDist2
+; 	STORE 	d16sN
+; 	
+; 	
+; 	
+; 	; - Store numerator in d16sN and denominator in d16sD.
+; ; - Call Div16s
+; ; - Result is stored in dres16sQ and dres16sR (quotient and remainder).
+; 
+; 	
+; 	
+; 	
+; 	
+; 	
+; 	runningDist2: DW 0
+; 	filterDist2:  DW 0
 	
 	
 
@@ -691,11 +740,22 @@ I2CError:
 ;* Variables
 ;***************************************************************
 Temp:			DW 0 ; "Temp" is not a great name, but can be useful
-currDist:		DW 0
+currDist5:		DW 0
 currHeading:	DW 0
-maxDist:		DW &H146C
-minDist:		DW &H117E
+maxDist5:		DW &H146C
+minDist5:		DW &H117E
 orientADelt: 	DW &H000A
+
+Mask23:   		DW &B00001100
+currDist2:		DW 0
+currDist3:		DW 0
+baseDist2:		DW 0
+baseDist3:		DW 0
+orientBMin:		DW 0
+orientBMax:		DW 0
+sin78:			DW &H03D2
+sin46:			DW &H02CF
+
 
 ;***************************************************************
 ;* Constants
