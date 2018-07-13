@@ -41,7 +41,8 @@ ENTITY IO_DECODER IS
     RIN_EN        : OUT STD_LOGIC;
     LIN_EN        : OUT STD_LOGIC;
     IRHI_EN		  : OUT STD_LOGIC;
-    IRLO_EN       : OUT STD_LOGIC
+    IRLO_EN       : OUT STD_LOGIC;
+    COS_LUT_EN	  : OUT STD_LOGIC
   );
 
 END ENTITY;
@@ -88,6 +89,7 @@ begin
   LIN_EN <= '1'       WHEN IO_INT = 16#1C9# ELSE '0';
   IRHI_EN <= '1'      WHEN IO_INT = 16#1D0# ELSE '0';
   IRLO_EN <= '1'      WHEN IO_INT = 16#1D1# ELSE '0';
+  COS_LUT_EN <= '1'   WHEN IO_INT = 16#1D2# ELSE '0';
 
       
 END a;

@@ -183,11 +183,8 @@ OUT    RESETPOS    ; reset odometer in case wheels moved after programming
 	OUT    SONAREN     ; enable sonar 0 and sonar 2
 	IN     DIST0       ; get sonar0 distance
 	OUT    SSEG1	   ; output to seven segment display
-	OUT	   DIST_CMD	   ; sends distance setpoint to PI position controller
-	LOAD   Ki
-	OUT	   POS_Ki
-	LOAD   Kp
-	OUT	   POS_Kp
+	LOAD   ZERO
+	STORE  CUM_SUM
 
 	; Intialize heading vector and velocity	
 	LOADI  150		   
@@ -197,13 +194,19 @@ OUT    RESETPOS    ; reset odometer in case wheels moved after programming
 	
 	
 Loop:
-; Main Control Loop	
-	
+; Main Control Loop
+
 	IN 		THETA		; Take in current angular position
-	OUT		THETA_ACT	; Send current angular positon from odometrey to sonar 0 for angular complement
-	IN		DIST0		; Read compensated distance to left wall
-	OUT 	DIST		; Write to the PI Controller
-			
+	STORE	THETA_ACT   ; Store current angular position
+	OUT		COS_THETA   ; Output to LUT
+	IN		COS_THETA   ; Input from LUT
+	STORE	m16sA       ; Store in multiplier INPUT A
+	IN		DIST0		; Read distance to left wall
+	STORE 	m16sB       ; Store in multiplier INPUT B
+	CALL 	Mult16s     ; Call the multiplier
+	LOAD	mres16sL    ; Low Word From Multiplier
+	STORE 	DIST_ACT	; Store Adjusted Distance
+		
 	JUMP 	GET_DIST	; Get distance to back wall
 
 RLoop:	
@@ -253,8 +256,8 @@ Forever:
 	
 ; Timer ISR. Used to call the position loop control as well as the motor control api
 CTimer_ISR:
-	IN     PI_Theta  ;  Returns Steering Trim Offset from Postion Control Feedback PI Loop
-	STORE  DTheta    ; Store the adjusted theta value from the PI position controller into the desired heading for the velocity controller
+    CALL	PI_CNTRL 	; Calculate Heading Correction
+	STORE	DTHETA		; Store as new heading
 	CALL   ControlMovement  ; Control Movement API
 	RETI   			 ; return from ISR
 	
@@ -358,6 +361,42 @@ CapVelLow:
 ;***************************************************************
 ;* Subroutines
 ;***************************************************************
+
+;*******************************************************************************
+; PI_CNTRL: Proportional-Integral Feedback Control Algorithm
+; Returns angular adjustment in AC that drives DIST_ACT --> DIST_CMD
+; Written by Austin Keener.  No licence or copyright applied.
+;*******************************************************************************
+
+PI_CNTRL:
+	
+	; Proportional Feedback
+	LOAD 	DIST_CMD    ; Distance setpoint
+	SUB		DIST_ACT	; Current Distance
+	STORE	ERR			; Distance error
+	STORE 	m16sA       ; Store in multiplier INPUT A
+	LOAD 	Kp          ; Proportional Constant
+	STORE	m16sB	    ; Store in multiplier INPUT B
+	CALL 	Mult16s     ; Multiply Kp and ERR
+	LOAD 	mres16sL    ; Return the answer
+	STORE 	P_CNTRL     ; Store into P_CNTRL
+	
+	; Integral Feedback
+	LOAD 	CUM_SUM     ; Cummualtive sum of position error
+	ADD		ERR			; Current error
+	STORE	CUM_SUM     ; Store into cumulative sum of position error
+	STORE 	m16sA		; Store in multiplier INPUT A
+	LOAD 	Ki          ; Load integral constant
+	STORE 	m16sB		; Store in multiplier INPUT B
+	CALL	Mult16s		; Multiply CUM_SUM and Ki
+	LOAD 	mres16sL	; Load the result
+	STORE	I_CNTRL		; Store into I_CNTRL
+	
+	; Heading Adjustment to compensate for drift
+	LOAD	P_CNTRL		; Proportional Adjustment
+	ADD		I_CNTRL		; Add integral Adjustment
+	
+	RETURN ; ADJUSTMENT IN AC
 
 ;*******************************************************************************
 ; Mod360: modulo 360
@@ -806,11 +845,19 @@ I2CError:
 ;***************************************************************
 ;* Variables
 ;***************************************************************
-Temp:     	DW 0 ; "Temp" is not a great name, but can be useful
-Ki:		  	DW 0;
-Kp: 	  	DW 0;
-DIST_WALL:	DW 0;
-DIST:		DW 0;
+Temp:     	DW 0 	; "Temp" is not a great name, but can be useful
+Ki:		  	DW 0	;
+Kp: 	  	DW 0	;
+DIST_WALL:	DW 0	;
+DIST:		DW 0	;
+CUM_SUM:	DW 0	; Cumulative average of position error
+DIST_ACT:	DW 0	; Current Distance to left Wall
+THETA_ACT:	DW 0 	; Current heading angle (from odometry)
+DIST_CMD:	DW 0 	; SP for the PI Controller
+ERR:		DW 0 	; Position Error
+P_CNTRL:	DW 0 	; Proportional control term
+I_CNTRL:	DW 0 	; Integral Control Term
+
 
 
 ;***************************************************************
@@ -908,19 +955,14 @@ SONARINT: 	EQU &HB1  ; Write mask for sonar interrupts
 SONAREN:  	EQU &HB2  ; register to control which sonars are enabled
 XPOS:     	EQU &HC0  ; Current X-position (read only)
 YPOS:     	EQU &HC1  ; Y-position
-THETA:    	EQU &HC2 ; Current rotational position of robot (0-359)
+THETA:    	EQU &HC2  ; Current rotational position of robot (0-359)
 RESETPOS: 	EQU &HC3  ; write anything here to reset odometry to 0
 RIN:      	EQU &HC8
 LIN:      	EQU &HC9
 IR_HI:    	EQU &HD0  	; read the high word of the IR receiver (OUT will clear both words)
 IR_LO:   	EQU &HD1  	; read the low word of the IR receiver (OUT will clear both words)
 
-DIST_CMD: 	EQU &HD2	; write the position setpoint to the PI position controller
-THETA_ACT:	EQU &HD3	; write the current angular position to SONAR0
-PI_THETA: 	EQU &HD4	; read the adjusted control signal from the PI position controller
-POS_Ki:	  	EQU &HD5	; write the integral gain to the PI controller
-POS_Kp:	  	EQU &HD6 	; write the proportional gain to the PI controller
-DIST:		EQU	&HD7	; Write the distance to the left wall to the PI controller
+COS_THETA: 	EQU &HD2	; COSINE LOOKUP TABLE
 
 
 
