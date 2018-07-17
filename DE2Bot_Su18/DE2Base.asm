@@ -244,49 +244,6 @@ orientCCleanUp:
 	
 
 
-
-
-
-; 
-; orientBStart:
-; 	LOADI 	0				; Zeroing out odometry 
-; 	STORE 	DVel
-; 	STORE	DTheta
-; 	OUT		RESETPOS
-; 	
-; 	LOAD	Mask2			; Starting the running average for Sensor 2
-; 	OUT 	SONAREN
-; 	IN 		DIST2
-; 	STORE	runningDist2
-; 	IN		DIST2
-; 	ADD		runningDist2
-; 	STORE   runningDist2
-; 	IN		DIST2
-; 	ADD		runningDist2
-; 	STORE	runningDist2
-; 	
-; 	
-; runAveDist2:
-; 	LOAD 	runningDist2
-; 	STORE 	d16sN
-; 	
-; 	
-; 	
-; 	; - Store numerator in d16sN and denominator in d16sD.
-; ; - Call Div16s
-; ; - Result is stored in dres16sQ and dres16sR (quotient and remainder).
-; 
-; 	
-; 	
-; 	
-; 	
-; 	
-; 	runningDist2: DW 0
-; 	filterDist2:  DW 0
-	
-	
-
-
 Die:
 ; Sometimes it's useful to permanently stop execution.
 ; This will also catch the execution if it accidentally
