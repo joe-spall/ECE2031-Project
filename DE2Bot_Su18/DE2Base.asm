@@ -85,44 +85,118 @@ Main:
 	LOADI  	0
 	STORE  	DVel        ; turn in-place (zero velocity)
 	STORE	DTheta
-	;CALL 	orientAInit
-	CALL	orientBInit
+	CALL 	orientAInit
+	;CALL	orientBInit
+	;CALL	orientCInit
 	JUMP	Die
 
 orientAInit: 
-	LOAD   	Mask5       ; defined below as 0b0100
-	OUT    	SONAREN     ; enable sonar 5
+	LOAD   	Mask5       	; defined below as 0b0100
+	OUT    	SONAREN     	; enable sonar 5
 orientARun:
-	IN		DIST5		; read sonar 5 distance
-	STORE 	currDist5	; storing current distance
- 	OUT		SSEG1		; debug
- 	CALL	Wait1		; debug
- 	LOAD	currDist5	; might not need, for safety
+	IN		DIST5			; read sonar 5 distance
+	OUT		SSEG1			; 
+	STORE 	currDist5		; storing current distance
 	SUB		maxDist5		
-	JPOS	orientAMove	; above max, move
-	LOAD	currDist5
+	JPOS	orientAMove		; above max, move
+	LOAD	currDist5		; TODO SO LED WHEN IN CERTAIN CALL
 	SUB		minDist5
-	JNEG	orientAMove ; below min, move
-	RETURN				; if aligned, stop part A
+	JNEG	orientAMove 	; below min, move
+	RETURN					; if aligned, stop part A
 orientAMove: 
 	LOAD 	DTheta
-	OUT 	SSEG2
-	ADD 	orientADelt	; load theta = 5
-	STORE  	DTheta      ; desired heading
-	ADDI   	&HFE97		; check if you already rotated 360
+	ADD 	orientADelt		; load amount of move per step
+	STORE  	DTheta      	; desired heading
+	ADDI   	&HFE97			; check if you already rotated 360
 	JNEG 	orientARun
-	RETURN				; if gone through 360deg, just stop part A
+	RETURN					; if gone through 360deg, just stop part A
 
+orientACheck:
+	LOAD currDist5
+	
+	
+	
 orientBInit:	
-	LOAD 	Mask23		; Mask sonar 2 and 3, remove 5
-	OUT		SONAREN		; Enable sonar 2 and 3
-orientBRun:
+	LOAD 	Mask23			; Mask sonar 2 and 3, remove 5
+	OUT		SONAREN			; Enable sonar 2 and 3
+orientBRead:
+	IN		DIST2
+	STORE	currDist2		; Read and store sensor 2
+	OUT		SSEG1			; Debug
+	IN		DIST3
+	STORE	currDist3		; Read and store sensor 3
+	OUT		SSEG2			; Debug
+	JUMP	orientBCalc		; Debug
+orientBCalc:
+	LOAD	currDist2		; Sensor2
+	STORE	d16sN			; TODO JUMP IF NOT IN RANGE
+	LOAD	currDist3
+	STORE	d16sD
+	CALL	Div16s			; Sensor2/Sensor3
+	LOAD 	dres16sQ
+	OUT		LCD				; Debug Show quotient
+	JUMP	orientBRead		; Debug
+	
+orientCInit:	
+	LOAD 	Mask12			; Mask sonar 1 and 2, remove 3
+	OUT		SONAREN			; Enable sonar 1 and 2
+orientCRead:
+	IN		DIST1
+	STORE	currDist1		; Read and store sensor 1
+	OUT		SSEG1			; Debug
+	IN		DIST2
+	STORE	currDist2		; Read and store sensor 2
+	OUT		SSEG2			; Debug
+	JUMP	orientCCalc		; Debug
+orientCCalc:
+	LOAD	currDist1		; Sensor1
+	STORE	d16sN			; TODO JUMP IF NOT IN RANGE
+	LOAD	currDist2
+	STORE	d16sD
+	CALL	Div16s			; Sensor1/Sensor2
+	LOAD 	dres16sQ
+	OUT		LCD				; Debug Show quotient
+	JUMP	orientCRead		; Debug
+	
+; 	LOAD	dres16sQ		
+; 	STORE	m16sA
+; 	LOAD 	sinRatio
+; 	STORE	m16sB
+; 	CALL	Mult16s			; Scale by sin ratio without divide
+; 	LOAD	mres16sH
+; 	SHIFT 	8
+; 	STORE	orientBT1
+; 	LOAD	mres16sL
+; 	SHIFT 	-8				; Divide by 256
+; 	AND		LowByte
+; 	OR		orientBT1
+; 	STORE	baseRatioQ	
+; 	
+
+; 	LOAD	dres16sQ
+; 	ADDI 	-1
+; 	JPOS 	orientBLeftMove	; Sensor2 is a lot more than Sensor3 when greater than 2
+; 	LOAD	dres16sR		; Scale to out of 100
+; 	STORE 	m16sA			 
+; 	LOADI	100
+; 	STORE	m16sB
+; 	CALL	Mult16s
+; 		
+	
+	
 
 	
-; - Store factors in m16sA and m16sB.
-; - Call Mult16s
-; - Result is stored in mres16sH and mres16sL (high and low words).
 	
+
+	
+orientBLeftMove:
+	
+
+
+
+	
+
+
 
 
 
@@ -739,22 +813,24 @@ I2CError:
 ;***************************************************************
 ;* Variables
 ;***************************************************************
-Temp:			DW 0 ; "Temp" is not a great name, but can be useful
+Temp:			DW 0
 currDist5:		DW 0
 currHeading:	DW 0
 maxDist5:		DW &H146C
 minDist5:		DW &H117E
-orientADelt: 	DW &H000A
+orientADelt: 	DW &H0005
 
+Mask12:   		DW &B00000110
 Mask23:   		DW &B00001100
+currDist1:		DW 0
 currDist2:		DW 0
 currDist3:		DW 0
-baseDist2:		DW 0
-baseDist3:		DW 0
+baseRatioQ:		DW 0
+baseRatioR:		DW 0
 orientBMin:		DW 0
 orientBMax:		DW 0
-sin78:			DW &H03D2
-sin46:			DW &H02CF
+sinRatio:		DW &H0550	; 100*sin(78)/sin(46) = 1360
+		
 
 
 ;***************************************************************
