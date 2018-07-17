@@ -85,114 +85,161 @@ Main:
 	LOADI  	0
 	STORE  	DVel        ; turn in-place (zero velocity)
 	STORE	DTheta
-	CALL 	orientAInit
-	;CALL	orientBInit
-	;CALL	orientCInit
+StartA:	
+	CALL 	orientAInit	
+	LOAD	orientASuccess
+	JNEG	End
+	JZERO	StartA
+StartB:	
+	CALL	orientBInit
+	LOAD 	orientBSuccess
+	JZERO	orientAShortMove
+End:	
+	CALL	orientCCleanUp
 	JUMP	Die
+	
+;***************************************************************
+;* Orient A Section- Makes long rotations looking at sensor 5 to be in a valid range, stops if gone 360 deg and hasn't found
+;***************************************************************
 
 orientAInit: 
+	LOAD 	Mask2			; LEDS to show in the orient A state
+	OUT		LEDS
 	LOAD   	Mask5       	; defined below as 0b0100
 	OUT    	SONAREN     	; enable sonar 5
 orientARun:
 	IN		DIST5			; read sonar 5 distance
-	OUT		SSEG1			; 
+	OUT		SSEG1			; Debug
 	STORE 	currDist5		; storing current distance
+	CALL	Wait1			; Debug?
+	LOAD 	currDist5
 	SUB		maxDist5		
 	JPOS	orientAMove		; above max, move
-	LOAD	currDist5		; TODO SO LED WHEN IN CERTAIN CALL
+	LOAD	currDist5		
 	SUB		minDist5
 	JNEG	orientAMove 	; below min, move
+	LOADI	1
+	STORE	orientASuccess
 	RETURN					; if aligned, stop part A
+	
 orientAMove: 
 	LOAD 	DTheta
 	ADD 	orientADelt		; load amount of move per step
 	STORE  	DTheta      	; desired heading
-	ADDI   	&HFE97			; check if you already rotated 360
+	OUT		SSEG2			; Debug shows rotation 
+	ADDI   	-360			; check if you already rotated 360
 	JNEG 	orientARun
+	LOADI 	-1				; Gone through 360 deg
+	STORE	orientASuccess
 	RETURN					; if gone through 360deg, just stop part A
 
-orientACheck:
-	LOAD currDist5
+orientAShortMove:
+	LOAD	DTheta
+	ADD		orientADelt2
+	STORE	DTheta
+	JUMP	StartA
+		
+;***************************************************************
+;* Orient B Section- Makes a short rotation back and forth to make sure Orient A wasn't just a misread.
+;  If not valid after either small turns, it resets to starting position
+;***************************************************************	
 	
+orientBInit: 
+	LOAD   	Mask5       	; defined below as 0b0100
+	OUT    	SONAREN     	; enable sonar 5
+	LOADI	0
+	STORE	orientBSuccess	; Resets success of orient b move
+	JUMP	orientBMove1
+orientBCheck:
+	LOAD	orientBStep
+	JZERO	orientBMove1	; Rotates one direction if on step 1
+	ADDI	-1
+	JZERO	orientBMove2	; Rotates other direction if on step 2
+	JUMP	Die				; for some reason didn't leave, so just stop
 	
-	
-orientBInit:	
-	LOAD 	Mask23			; Mask sonar 2 and 3, remove 5
-	OUT		SONAREN			; Enable sonar 2 and 3
-orientBRead:
-	IN		DIST2
-	STORE	currDist2		; Read and store sensor 2
+orientBRun1:
+	IN		DIST5			; read sonar 5 distance
 	OUT		SSEG1			; Debug
-	IN		DIST3
-	STORE	currDist3		; Read and store sensor 3
-	OUT		SSEG2			; Debug
-	JUMP	orientBCalc		; Debug
-orientBCalc:
-	LOAD	currDist2		; Sensor2
-	STORE	d16sN			; TODO JUMP IF NOT IN RANGE
-	LOAD	currDist3
-	STORE	d16sD
-	CALL	Div16s			; Sensor2/Sensor3
-	LOAD 	dres16sQ
-	OUT		LCD				; Debug Show quotient
-	JUMP	orientBRead		; Debug
+	STORE 	currDist5		; storing current distance
+	SUB		maxDist5		
+	JPOS	orientBMoveReset1 ; above max, reset
+	LOAD	currDist5		; TODO SO LED WHEN IN CERTAIN CALL
+	SUB		minDist5
+	JNEG	orientBMoveReset1 ; below min, reset
+	JUMP	orientBMove2
 	
-orientCInit:	
-	LOAD 	Mask12			; Mask sonar 1 and 2, remove 3
-	OUT		SONAREN			; Enable sonar 1 and 2
-orientCRead:
-	IN		DIST1
-	STORE	currDist1		; Read and store sensor 1
+orientBRun2:
+	IN		DIST5			; read sonar 5 distance
 	OUT		SSEG1			; Debug
-	IN		DIST2
-	STORE	currDist2		; Read and store sensor 2
-	OUT		SSEG2			; Debug
-	JUMP	orientCCalc		; Debug
-orientCCalc:
-	LOAD	currDist1		; Sensor1
-	STORE	d16sN			; TODO JUMP IF NOT IN RANGE
-	LOAD	currDist2
-	STORE	d16sD
-	CALL	Div16s			; Sensor1/Sensor2
-	LOAD 	dres16sQ
-	OUT		LCD				; Debug Show quotient
-	JUMP	orientCRead		; Debug
-	
-; 	LOAD	dres16sQ		
-; 	STORE	m16sA
-; 	LOAD 	sinRatio
-; 	STORE	m16sB
-; 	CALL	Mult16s			; Scale by sin ratio without divide
-; 	LOAD	mres16sH
-; 	SHIFT 	8
-; 	STORE	orientBT1
-; 	LOAD	mres16sL
-; 	SHIFT 	-8				; Divide by 256
-; 	AND		LowByte
-; 	OR		orientBT1
-; 	STORE	baseRatioQ	
-; 	
+	STORE 	currDist5		; storing current distance
+	SUB		maxDist5		
+	JPOS	orientBMoveReset2 ; above max, reset 
+	LOAD	currDist5		; TODO SO LED WHEN IN CERTAIN CALL
+	SUB		minDist5
+	JNEG	orientBMoveReset2 ; below min, reset
+	JUMP	orientBMoveSuccess ; Should be successfully orientated so correct orientation and leave
+					  
+orientBMove1: 
+	LOAD	Mask5			; LEDS to show in the orient B state
+	OUT		LEDS
+	LOAD 	DTheta
+	ADD 	orientBDelt		; move before first check to see if any difference
+	STORE  	DTheta      	; desired heading
+	CALL	Wait1
+	CALL	Wait1
+	JUMP	orientBRun1
 
-; 	LOAD	dres16sQ
-; 	ADDI 	-1
-; 	JPOS 	orientBLeftMove	; Sensor2 is a lot more than Sensor3 when greater than 2
-; 	LOAD	dres16sR		; Scale to out of 100
-; 	STORE 	m16sA			 
-; 	LOADI	100
-; 	STORE	m16sB
-; 	CALL	Mult16s
-; 		
+orientBMoveReset1: 
+	LOAD 	DTheta
+	SUB 	orientBDelt		; recenter to start orientation
+	STORE  	DTheta      	; desired heading
+	LOADI	0
+	STORE	orientBSuccess	; Was not successful, so exit
+	RETURN
 	
-	
+orientBMove2: 
+	LOAD	Mask7			; LEDS to show in the orient B state
+	OUT		LEDS
+	LOAD 	DTheta
+	SUB 	orientBDelt		; call twice to make up for initial move
+	SUB		orientBDelt		; 
+	STORE  	DTheta      	; desired heading
+	CALL	Wait1
+	CALL	Wait1
+	JUMP	orientBRun2
 
-	
-	
+orientBMoveReset2: 
+	LOAD 	DTheta
+	ADD 	orientBDelt		; recenter to start orinetation
+	STORE  	DTheta      	; desired heading
+	LOADI	0
+	STORE	orientBSuccess	; Was not successful, so exit
+	RETURN
 
+orientBMoveSuccess:
+	LOAD 	DTheta
+	ADD 	orientBDelt		; recenter to start orinetation
+	STORE  	DTheta      	; desired heading
+	CALL	Wait1
+	CALL	Wait1
+	LOADI	1
+	STORE	orientBSuccess	; Was successful, so exit
+	RETURN
 	
-orientBLeftMove:
-	
+;***************************************************************
+;* Orient C Section- Cleans up from Orient A and B and sets the robot facing the far wall, beeping when done
+;***************************************************************
 
-
+orientCCleanUp:
+	LOAD	Mask4			; LEDS to show in the orient C state
+	OUT		XLEDS
+	OUT		RESETPOS		; Zeros odometry 
+	LOADI	-92				; Rotates -90 deg on completion 
+	STORE	DTheta
+	OUT		BEEP			; Beeps for 1 second to notifiy completion
+	CALL	Wait1
+	OUT		BEEP
+	RETURN
 
 	
 
@@ -816,9 +863,16 @@ I2CError:
 Temp:			DW 0
 currDist5:		DW 0
 currHeading:	DW 0
-maxDist5:		DW &H146C
-minDist5:		DW &H117E
-orientADelt: 	DW &H0005
+maxDist5:		DW &H1324
+minDist5:		DW &H10B8
+orientADelt: 	DW 8
+orientADelt2: 	DW 5
+orientASuccess:	DW 0
+
+orientBSuccess: DW 0
+orientBStep:	DW 0
+orientBDelt:	DW -10
+
 
 Mask12:   		DW &B00000110
 Mask23:   		DW &B00001100
