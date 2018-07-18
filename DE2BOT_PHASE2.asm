@@ -961,7 +961,6 @@ RIN:      	EQU &HC8
 LIN:      	EQU &HC9
 IR_HI:    	EQU &HD0  	; read the high word of the IR receiver (OUT will clear both words)
 IR_LO:   	EQU &HD1  	; read the low word of the IR receiver (OUT will clear both words)
-
 COS_THETA: 	EQU &HD2	; COSINE LOOKUP TABLE
 
 
