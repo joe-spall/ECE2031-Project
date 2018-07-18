@@ -59,17 +59,12 @@ WaitForUser:
 	JPOS   WaitForUser ; not ready (KEYs are active-low, hence JPOS)
 	LOAD   Zero
 	OUT    XLEDS       ; clear LEDs once ready to continue
-	
-	
 
 ;***************************************************************
 ;* Main code
 ;***************************************************************
 Main:
-
-LOAD   Zero
-OUT    XLEDS       ; clear LEDs once ready to continue	
-OUT    RESETPOS    ; reset odometer in case wheels moved after programming
+	OUT    RESETPOS    ; reset odometer in case wheels moved after programming
 	
 	; Before enabling the movement control code, set it to
 	; not start moving immediately.
@@ -85,6 +80,169 @@ OUT    RESETPOS    ; reset odometer in case wheels moved after programming
 	; If you want to take manual control of the robot,
 	; execute CLI &B0010 to disable the timer interrupt.
 	
+
+
+	LOADI  	0
+	STORE  	DVel        ; turn in-place (zero velocity)
+	STORE	DTheta
+StartA:	
+	CALL 	orientAInit	
+	LOAD	orientASuccess
+	JNEG	End
+	JZERO	StartA
+StartB:	
+	CALL	orientBInit
+	LOAD 	orientBSuccess
+	JZERO	orientAShortMove
+End:	
+	CALL	orientCCleanUp
+	JUMP	Die
+	
+;***************************************************************
+;* Orient A Section- Makes long rotations looking at sensor 5 to be in a valid range, stops if gone 360 deg and hasn't found
+;***************************************************************
+
+orientAInit: 
+	LOAD 	Mask2			; LEDS to show in the orient A state
+	OUT		LEDS
+	LOAD   	Mask5       	; defined below as 0b0100
+	OUT    	SONAREN     	; enable sonar 5
+orientARun:
+	IN		DIST5			; read sonar 5 distance
+	OUT		SSEG1			; Debug
+	STORE 	currDist5		; storing current distance
+	CALL	Wait1			; Debug?
+	LOAD 	currDist5
+	SUB		maxDist5		
+	JPOS	orientAMove		; above max, move
+	LOAD	currDist5		
+	SUB		minDist5
+	JNEG	orientAMove 	; below min, move
+	LOADI	1
+	STORE	orientASuccess
+	RETURN					; if aligned, stop part A
+	
+orientAMove: 
+	LOAD 	DTheta
+	ADD 	orientADelt		; load amount of move per step
+	STORE  	DTheta      	; desired heading
+	OUT		SSEG2			; Debug shows rotation 
+	ADDI   	-360			; check if you already rotated 360
+	JNEG 	orientARun
+	LOADI 	-1				; Gone through 360 deg
+	STORE	orientASuccess
+	RETURN					; if gone through 360deg, just stop part A
+
+orientAShortMove:
+	LOAD	DTheta
+	ADD		orientADelt2
+	STORE	DTheta
+	JUMP	StartA
+		
+;***************************************************************
+;* Orient B Section- Makes a short rotation back and forth to make sure Orient A wasn't just a misread.
+;  If not valid after either small turns, it resets to starting position
+;***************************************************************	
+	
+orientBInit: 
+	LOAD   	Mask5       	; defined below as 0b0100
+	OUT    	SONAREN     	; enable sonar 5
+	LOADI	0
+	STORE	orientBSuccess	; Resets success of orient b move
+	JUMP	orientBMove1
+orientBCheck:
+	LOAD	orientBStep
+	JZERO	orientBMove1	; Rotates one direction if on step 1
+	ADDI	-1
+	JZERO	orientBMove2	; Rotates other direction if on step 2
+	JUMP	Die				; for some reason didn't leave, so just stop
+	
+orientBRun1:
+	IN		DIST5			; read sonar 5 distance
+	OUT		SSEG1			; Debug
+	STORE 	currDist5		; storing current distance
+	SUB		maxDist5		
+	JPOS	orientBMoveReset1 ; above max, reset
+	LOAD	currDist5		; TODO SO LED WHEN IN CERTAIN CALL
+	SUB		minDist5
+	JNEG	orientBMoveReset1 ; below min, reset
+	JUMP	orientBMove2
+	
+orientBRun2:
+	IN		DIST5			; read sonar 5 distance
+	OUT		SSEG1			; Debug
+	STORE 	currDist5		; storing current distance
+	SUB		maxDist5		
+	JPOS	orientBMoveReset2 ; above max, reset 
+	LOAD	currDist5		; TODO SO LED WHEN IN CERTAIN CALL
+	SUB		minDist5
+	JNEG	orientBMoveReset2 ; below min, reset
+	JUMP	orientBMoveSuccess ; Should be successfully orientated so correct orientation and leave
+					  
+orientBMove1: 
+	LOAD	Mask5			; LEDS to show in the orient B state
+	OUT		LEDS
+	LOAD 	DTheta
+	ADD 	orientBDelt		; move before first check to see if any difference
+	STORE  	DTheta      	; desired heading
+	CALL	Wait1
+	CALL	Wait1
+	JUMP	orientBRun1
+
+orientBMoveReset1: 
+	LOAD 	DTheta
+	SUB 	orientBDelt		; recenter to start orientation
+	STORE  	DTheta      	; desired heading
+	LOADI	0
+	STORE	orientBSuccess	; Was not successful, so exit
+	RETURN
+	
+orientBMove2: 
+	LOAD	Mask7			; LEDS to show in the orient B state
+	OUT		LEDS
+	LOAD 	DTheta
+	SUB 	orientBDelt		; call twice to make up for initial move
+	SUB		orientBDelt		; 
+	STORE  	DTheta      	; desired heading
+	CALL	Wait1
+	CALL	Wait1
+	JUMP	orientBRun2
+
+orientBMoveReset2: 
+	LOAD 	DTheta
+	ADD 	orientBDelt		; recenter to start orinetation
+	STORE  	DTheta      	; desired heading
+	LOADI	0
+	STORE	orientBSuccess	; Was not successful, so exit
+	RETURN
+
+orientBMoveSuccess:
+	LOAD 	DTheta
+	ADD 	orientBDelt		; recenter to start orinetation
+	STORE  	DTheta      	; desired heading
+	CALL	Wait1
+	CALL	Wait1
+	LOADI	1
+	STORE	orientBSuccess	; Was successful, so exit
+	RETURN
+	
+;***************************************************************
+;* Orient C Section- Cleans up from Orient A and B and sets the robot facing the far wall, beeping when done
+;***************************************************************
+
+orientCCleanUp:
+	LOAD	Mask4			; LEDS to show in the orient C state
+	OUT		XLEDS
+	OUT		RESETPOS		; Zeros odometry 
+	LOADI	-92				; Rotates -90 deg on completion 
+	STORE	DTheta
+	OUT		BEEP			; Beeps for 1 second to notifiy completion
+	CALL	Wait1
+	OUT		BEEP
+	RETURN
+
+	
+
 
 Die:
 ; Sometimes it's useful to permanently stop execution.
@@ -102,19 +260,20 @@ Forever:
 	DEAD:  DW &HDEAD   ; Example of a "local" variable
 
 
-	
 ; Timer ISR.  Currently just calls the movement control code.
 ; You could, however, do additional tasks here if desired.
 CTimer_ISR:
-	CALL   ControlMovement  ;
+	CALL   ControlMovement
 	RETI   ; return from ISR
 	
 	
 ; Control code.  If called repeatedly, this code will attempt
 ; to control the robot to face the angle specified in DTheta
 ; and match the speed specified in DVel
-DTheta:    DW 0
-DVel:      DW 0
+DTheta:    		DW 0
+DVel:      		DW 0
+
+
 ControlMovement:
 	LOADI  50          ; used for the CapValue subroutine
 	STORE  MaxVal
@@ -209,6 +368,7 @@ CapVelLow:
 ;***************************************************************
 ;* Subroutines
 ;***************************************************************
+
 
 ;*******************************************************************************
 ; Mod360: modulo 360
@@ -657,7 +817,32 @@ I2CError:
 ;***************************************************************
 ;* Variables
 ;***************************************************************
-Temp:     DW 0 ; "Temp" is not a great name, but can be useful
+Temp:			DW 0
+currDist5:		DW 0
+currHeading:	DW 0
+maxDist5:		DW &H1324
+minDist5:		DW &H10B8
+orientADelt: 	DW 8
+orientADelt2: 	DW 5
+orientASuccess:	DW 0
+
+orientBSuccess: DW 0
+orientBStep:	DW 0
+orientBDelt:	DW -10
+
+
+Mask12:   		DW &B00000110
+Mask23:   		DW &B00001100
+currDist1:		DW 0
+currDist2:		DW 0
+currDist3:		DW 0
+baseRatioQ:		DW 0
+baseRatioR:		DW 0
+orientBMin:		DW 0
+orientBMax:		DW 0
+sinRatio:		DW &H0550	; 100*sin(78)/sin(46) = 1360
+		
+
 
 ;***************************************************************
 ;* Constants
@@ -749,11 +934,9 @@ SONARINT: EQU &HB1  ; Write mask for sonar interrupts
 SONAREN:  EQU &HB2  ; register to control which sonars are enabled
 XPOS:     EQU &HC0  ; Current X-position (read only)
 YPOS:     EQU &HC1  ; Y-position
-THETA:    EQU &HC2 ; Current rotational position of robot (0-359)
+THETA:    EQU &HC2  ; Current rotational position of robot (0-359)
 RESETPOS: EQU &HC3  ; write anything here to reset odometry to 0
 RIN:      EQU &HC8
 LIN:      EQU &HC9
 IR_HI:    EQU &HD0  ; read the high word of the IR receiver (OUT will clear both words)
 IR_LO:    EQU &HD1  ; read the low word of the IR receiver (OUT will clear both words)
-
-
