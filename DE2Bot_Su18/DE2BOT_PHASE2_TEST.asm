@@ -70,10 +70,10 @@ WaitForUser:
 ;***************************************************************
 Main:
 
-LOAD   Zero
-OUT    XLEDS       ; clear LEDs once ready to continue	
-OUT    RESETPOS    ; reset odometer in case wheels moved after programming
-LOAD   Mask0       
+	LOAD   Zero
+	OUT    XLEDS       ; clear LEDs once ready to continue	
+	OUT    RESETPOS    ; reset odometer in case wheels moved after programming
+	LOAD   Mask0       
 	OR	   Mask2	   
 	OUT    SONAREN     ; enable sonar 0 and sonar 2
 	
@@ -90,86 +90,69 @@ LOAD   Mask0
 	; code in that ISR will attempt to control the robot.
 	; If you want to take manual control of the robot,
 	; execute CLI &B0010 to disable the timer interrupt.
-	
 
 
-	
-	
-	; Determine initial distance from wall and store into setpoint register to be used with the control loops.
-	CALL	WAIT1
+;***************************************************************
+;* Phase 1 Control Loop
+;***************************************************************
+
+
+;***************************************************************
+;* Phase 2 Control Loop
+;***************************************************************
+
+	CALL	WAIT1   	; Wait Two Seconds to give sonar readings time to stabilize
 	CALL	WAIT1
     
-    IN		DIST0
-	STORE  DIST_CMD
+    IN		DIST0		; Read in initial distance to wall
+	STORE  DIST_CMD		; Store this distance as the control setpoint for the PI controller
 	
-	
-	
-		; Intialize heading vector and velocity	
-	LOADI  150		   
-	STORE  DVel
+	LOADI  225		   
+	STORE  DVel			; Initialize velocity to medium speed
 	LOADI  0
-	STORE  DTheta
+	STORE  DTheta		; Initialize heading to zero
 	LOAD   ZERO
-	STORE  CUM_SUM
-	
-	
-Loop:
-; Main Control Loop
+	STORE  CUM_SUM		; Zero out the error accumulator
 
+Loop:					; Main Control Loop
 	IN 		THETA		; Take in current angular position
 	STORE	THETA_ACT   ; Store current angular position
-	;OUT	COS_THETA   ; Output to LUT
-	;IN		COS_THETA   ; Input from LUT
-	;STORE	m16sA       ; Store in multiplier INPUT A
 	IN		DIST0		; Read distance to left wall
-	;STORE 	m16sB       ; Store in multiplier INPUT B
-	;CALL 	Mult16s     ; Call the multiplier
-	;LOAD	mres16sL    ; Low Word From Multiplier
-	STORE	DIST_ACT
-	IN     DIST2       ; get sonar2 distance
-	OUT    SSEG1       ; useful debug info
-	ADDI   -305        ; 2ft in mm
-	JNEG   Die
-	JUMP  Loop
+	STORE	DIST_ACT	; Store as current distance (possibly add running average and value filtering)	
+	IN     DIST2       	; Read distance from back wall
+	ADDI   -305        	; Subtract 1 ft in mm
+	JNEG   Die			; If the robot is within 1ft of the back wall --> Stop
+	JUMP  Loop			; Otherwise Loop
 
-	
-; This code retrieves the distance between the robot and the back wall,
-; Accounting for heading angle
-;GET_DIST:
-	;LOAD 	THETA_ACT
-	;ADD		10		
-	;JNEG	LFSonar 	;Left offset if less than -10 degrees
-	;SUB		15
-	;JPOS	RFSonar 	;Right offset if greater than +5 degrees
-	;IN		DIST3		;Input sonar 3 distance if +-5 degrees off center
-	;STORE	DIST_WALL	;Distance to back wall
-	;JUMP	RLoop		; return to main loop
 
-; This code is used to kill the robot at the end of the program	
-Die:
-	CLI    &B1111      ; disable all interrupts
-	LOAD   Zero        ; Stop everything.
+Die:					; This code is used to kill the robot at the end of the program	
+	CLI    &B1111      	; disable all interrupts
+	LOAD   Zero        	; Stop everything.
 	OUT    LVELCMD
 	OUT    RVELCMD
 	OUT    SONAREN
-	LOAD   DEAD        ; An indication that we are dead
-	OUT    SSEG2       ; "dEAd" on the sseg
+	LOAD   DEAD        	; An indication that we are dead
+	OUT    SSEG2       	; "dEAd" on the sseg
 Forever:
-	JUMP   Forever     ; Do this forever.
-	DEAD:  DW &HDEAD   ; Example of a "local" variable
+	JUMP   Forever     	; Do this forever.
+	DEAD:  DW &HDEAD   	; Example of a "local" variable
 
 
-	
-; Timer ISR. Used to call the position loop control as well as the motor control api
-CTimer_ISR:
+;***************************************************************
+;* Interrupt Routine
+;***************************************************************
+
+CTimer_ISR:				; Timer ISR. Used to call the position loop control as well as the motor control api
     CALL	PI_CNTRL 	; Calculate Heading Correction
-    LOAD	ZERO
-    SUB		PI
-	STORE	DTHETA
-	OUT		LCD		; Store as new heading
-	CALL    ControlMovement  ; Control Movement API
-	RETI   			 ; return from ISR
+	LOAD	PI			; Load corrected heading
+	STORE	DTHETA		; Store into the Control Movement APIs heading SP
+	CALL    ControlMovement  	; Control Movement API
+	RETI   			 			; return from ISR
 	
+
+;***************************************************************
+;* Movement API
+;***************************************************************
 	
 ; Control code.  If called repeatedly, this code will attempt
 ; to control the robot to face the angle specified in DTheta
@@ -301,12 +284,18 @@ PI_CNTRL:
 	LOAD 	mres16sL	; Load the result
 	STORE	I_CNTRL		; Store into I_CNTRL
 	
-	; Heading Adjustment to compensate for drift
+	; PI Controller Heading Adjustment Calculation
 	LOAD	P_CNTRL		; Proportional Adjustment
 	ADD		I_CNTRL		; Add integral Adjustment
-	SHIFT   -3
-	STORE	PI
-	RETURN ; ADJUSTMENT IN AC
+	SHIFT   -4			; This effectively scales the ouput of the controller
+						; to give an adequate level of precision of the control constants
+						; and also have a reasonably scaled output heading. 
+	STORE	PI			; Store the adjusted heading result of the PI controller
+	
+	LOAD	ZERO		; Negates the result of the controller (use if needed)
+    SUB		PI
+    
+	RETURN 				; ADJUSTMENT IN AC
 
 ;*******************************************************************************
 ; Mod360: modulo 360
@@ -756,19 +745,18 @@ I2CError:
 ;* Variables
 ;***************************************************************
 Temp:     	DW 0 	; "Temp" is not a great name, but can be useful
-Ki:		  	DW 0	;
-Kp: 	  	DW 2	;
+Ki:		  	DW 1	; Integral Constant Setpoint for the PI Controller (experimentally tuned for position tracking)
+Kp: 	  	DW 3	; Proportional Constant Setpoint for the PI Controller (experimentally tuned for position tracking)
 DIST_WALL:	DW 0	;
 DIST:		DW 0	;
-CUM_SUM:	DW 0	; Cumulative average of position error
-DIST_ACT:	DW 0	; Current Distance to left Wall
+CUM_SUM:	DW 0	; Cumulative sum of position error
+DIST_ACT:	DW 0	; Current Distance to left Wall (Sonar 0)
 THETA_ACT:	DW 0 	; Current heading angle (from odometry)
 DIST_CMD:	DW 0 	; SP for the PI Controller
 ERR:		DW 0 	; Position Error
-P_CNTRL:	DW 0 	; Proportional control term
-I_CNTRL:	DW 0 	; Integral Control Term
-PI:			DW 0
-
+P_CNTRL:	DW 0 	; Proportional Control Term of the PI Controller
+I_CNTRL:	DW 0 	; Integral Control Term of the PI Controller
+PI:			DW 0	; PI Controller Output - Heading Correction
 
 
 ;***************************************************************
@@ -787,8 +775,6 @@ Seven:    DW 7
 Eight:    DW 8
 Nine:     DW 9
 Ten:      DW 10
-PIDTUNING: DW 0
-INCR:	  DW 0
 
 
 ; Some bit masks.
@@ -872,7 +858,7 @@ RIN:      	EQU &HC8
 LIN:      	EQU &HC9
 IR_HI:    	EQU &HD0  	; read the high word of the IR receiver (OUT will clear both words)
 IR_LO:   	EQU &HD1  	; read the low word of the IR receiver (OUT will clear both words)
-COS_THETA: 	EQU &HD2	; COSINE LOOKUP TABLE
+
 
 
 
