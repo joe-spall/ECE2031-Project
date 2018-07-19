@@ -86,13 +86,14 @@ Main:
 	LOADI	0
 	STORE	DTheta
 	STORE	DVel
+
 	
-	
+	CALL	orientInit
 StartA:	
 	CALL 	orientAInit	
 	LOAD	orientASuccess
-	JNEG	End
 	JZERO	StartA
+	JNEG	End
 StartB:	
 	CALL	orientBInit
 	LOAD 	orientBSuccess
@@ -101,6 +102,19 @@ End:
 	CALL	orientCCleanUp
 	JUMP	Die
 	
+	
+;***************************************************************
+;* Orient Init Section- Makes long rotations looking at sensor 5 to be in a valid range, stops if gone 360 deg and hasn't found
+;***************************************************************
+orientInit:
+	LOAD	Mask5
+	OUT		SONAREN
+	LOAD 	DTheta
+	ADDI	10
+	STORE	DTheta
+	CALL	Wait1
+	RETURN
+		
 ;***************************************************************
 ;* Orient A Section- Makes long rotations looking at sensor 5 to be in a valid range, stops if gone 360 deg and hasn't found
 ;***************************************************************
@@ -108,14 +122,12 @@ End:
 orientAInit: 
 	LOAD 	Mask2			; LEDS to show in the orient A state
 	OUT		LEDS
-	LOAD   	Mask5       	; defined below as 0b0100
-	OUT    	SONAREN     	; enable sonar 5
+	LOADI	0
+	STORE	orientASuccess
 orientARun:
 	IN		DIST5			; read sonar 5 distance
 	STORE 	currDist5		; storing current distance
-	CALL	Wait1
-	LOAD 	currDist5
-	SUB		maxDist5		
+	SUB		maxDist5	
 	JPOS	orientAMove		; above max, move
 	LOAD	currDist5		
 	SUB		minDist5
@@ -124,13 +136,22 @@ orientARun:
 	STORE	orientASuccess
 	RETURN					; if aligned, stop part A
 	
-orientAMove: 
-	LOAD 	DTheta
+orientAMove:
+	IN		Theta
+	SUB 	DTheta
+	JZERO	orientAMoveContinue	
+	JUMP	orientAMove
+orientAMoveContinue:	
+	OUT		LCD
+	LOAD	DTheta
 	ADD 	orientADelt		; load amount of move per step
 	STORE  	DTheta      	; desired heading
-	ADDI   	-360			; check if you already rotated 360
-	JNEG 	orientARun
-	LOADI 	-1				; Gone through 360 deg
+	;LOAD	orientAngle
+
+	;ADDI   	-360			; check if you already rotated 360
+	;JNEG 	orientARun
+	JUMP	orientARun
+	;LOADI 	-1				; Gone through 360 deg
 	STORE	orientASuccess
 	RETURN					; if gone through 360deg, just stop part A
 
@@ -146,8 +167,6 @@ orientAShortMove:
 ;***************************************************************	
 	
 orientBInit: 
-	LOAD   	Mask5       	; defined below as 0b0100
-	OUT    	SONAREN     	; enable sonar 5
 	LOADI	0
 	STORE	orientBSuccess	; Resets success of orient b move
 	JUMP	orientBMove1
@@ -221,7 +240,6 @@ orientBMoveSuccess:
 	LOAD 	DTheta
 	ADD 	orientBDelt1		; recenter to start orinetation
 	STORE  	DTheta      	; desired heading
-	STORE	orientAngle
 	CALL	Wait1
 	LOADI	1
 	STORE	orientBSuccess	; Was successful, so exit
@@ -830,21 +848,11 @@ orientASuccess:	DW 0
 orientBSuccess: DW 0
 orientBStep:	DW 0
 orientBDelt1:	DW -10
-orientBDelt2:	DW -8
-
-orientAngle:	DW 0
+orientBDelt2:	DW -6
 
 
-Mask12:   		DW &B00000110
-Mask23:   		DW &B00001100
-currDist1:		DW 0
-currDist2:		DW 0
-currDist3:		DW 0
-baseRatioQ:		DW 0
-baseRatioR:		DW 0
-orientBMin:		DW 0
-orientBMax:		DW 0
-sinRatio:		DW &H0550	; 100*sin(78)/sin(46) = 1360
+
+
 		
 
 
