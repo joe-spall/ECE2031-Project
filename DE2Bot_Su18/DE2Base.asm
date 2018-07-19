@@ -82,9 +82,12 @@ Main:
 	
 
 
-	LOADI  	0
-	STORE  	DVel        ; turn in-place (zero velocity)
+
+	LOADI	0
 	STORE	DTheta
+	STORE	DVel
+	
+	
 StartA:	
 	CALL 	orientAInit	
 	LOAD	orientASuccess
@@ -109,9 +112,8 @@ orientAInit:
 	OUT    	SONAREN     	; enable sonar 5
 orientARun:
 	IN		DIST5			; read sonar 5 distance
-	OUT		SSEG1			; Debug
 	STORE 	currDist5		; storing current distance
-	CALL	Wait1			; Debug?
+	CALL	Wait1
 	LOAD 	currDist5
 	SUB		maxDist5		
 	JPOS	orientAMove		; above max, move
@@ -126,7 +128,6 @@ orientAMove:
 	LOAD 	DTheta
 	ADD 	orientADelt		; load amount of move per step
 	STORE  	DTheta      	; desired heading
-	OUT		SSEG2			; Debug shows rotation 
 	ADDI   	-360			; check if you already rotated 360
 	JNEG 	orientARun
 	LOADI 	-1				; Gone through 360 deg
@@ -135,7 +136,7 @@ orientAMove:
 
 orientAShortMove:
 	LOAD	DTheta
-	ADD		orientADelt2
+	ADD		orientADelt
 	STORE	DTheta
 	JUMP	StartA
 		
@@ -159,22 +160,20 @@ orientBCheck:
 	
 orientBRun1:
 	IN		DIST5			; read sonar 5 distance
-	OUT		SSEG1			; Debug
 	STORE 	currDist5		; storing current distance
 	SUB		maxDist5		
 	JPOS	orientBMoveReset1 ; above max, reset
-	LOAD	currDist5		; TODO SO LED WHEN IN CERTAIN CALL
+	LOAD	currDist5		
 	SUB		minDist5
 	JNEG	orientBMoveReset1 ; below min, reset
 	JUMP	orientBMove2
 	
 orientBRun2:
 	IN		DIST5			; read sonar 5 distance
-	OUT		SSEG1			; Debug
 	STORE 	currDist5		; storing current distance
 	SUB		maxDist5		
 	JPOS	orientBMoveReset2 ; above max, reset 
-	LOAD	currDist5		; TODO SO LED WHEN IN CERTAIN CALL
+	LOAD	currDist5		
 	SUB		minDist5
 	JNEG	orientBMoveReset2 ; below min, reset
 	JUMP	orientBMoveSuccess ; Should be successfully orientated so correct orientation and leave
@@ -183,15 +182,14 @@ orientBMove1:
 	LOAD	Mask5			; LEDS to show in the orient B state
 	OUT		LEDS
 	LOAD 	DTheta
-	ADD 	orientBDelt		; move before first check to see if any difference
+	ADD 	orientBDelt1		; move before first check to see if any difference
 	STORE  	DTheta      	; desired heading
-	CALL	Wait1
 	CALL	Wait1
 	JUMP	orientBRun1
 
 orientBMoveReset1: 
 	LOAD 	DTheta
-	SUB 	orientBDelt		; recenter to start orientation
+	SUB 	orientBDelt1		; recenter to start orientation
 	STORE  	DTheta      	; desired heading
 	LOADI	0
 	STORE	orientBSuccess	; Was not successful, so exit
@@ -201,16 +199,19 @@ orientBMove2:
 	LOAD	Mask7			; LEDS to show in the orient B state
 	OUT		LEDS
 	LOAD 	DTheta
-	SUB 	orientBDelt		; call twice to make up for initial move
-	SUB		orientBDelt		; 
-	STORE  	DTheta      	; desired heading
+	SUB 	orientBDelt2		; call twice to make up for initial move
+	STORE	DTheta
+	CALL	Wait1
+	LOAD	DTheta
+	SUB		orientBDelt2
+	STORE	DTheta
 	CALL	Wait1
 	CALL	Wait1
 	JUMP	orientBRun2
 
 orientBMoveReset2: 
 	LOAD 	DTheta
-	ADD 	orientBDelt		; recenter to start orinetation
+	ADD 	orientBDelt2		; recenter to start orinetation
 	STORE  	DTheta      	; desired heading
 	LOADI	0
 	STORE	orientBSuccess	; Was not successful, so exit
@@ -218,9 +219,9 @@ orientBMoveReset2:
 
 orientBMoveSuccess:
 	LOAD 	DTheta
-	ADD 	orientBDelt		; recenter to start orinetation
+	ADD 	orientBDelt1		; recenter to start orinetation
 	STORE  	DTheta      	; desired heading
-	CALL	Wait1
+	STORE	orientAngle
 	CALL	Wait1
 	LOADI	1
 	STORE	orientBSuccess	; Was successful, so exit
@@ -820,15 +821,18 @@ I2CError:
 Temp:			DW 0
 currDist5:		DW 0
 currHeading:	DW 0
-maxDist5:		DW &H1324
-minDist5:		DW &H10B8
-orientADelt: 	DW 8
+maxDist5:		DW 5000
+minDist5:		DW 4200
+orientADelt: 	DW 6
 orientADelt2: 	DW 5
 orientASuccess:	DW 0
 
 orientBSuccess: DW 0
 orientBStep:	DW 0
-orientBDelt:	DW -10
+orientBDelt1:	DW -10
+orientBDelt2:	DW -8
+
+orientAngle:	DW 0
 
 
 Mask12:   		DW &B00000110
