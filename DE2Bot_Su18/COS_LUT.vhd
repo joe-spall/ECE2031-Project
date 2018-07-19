@@ -1,0 +1,78 @@
+-- COS_LUT.VHD (VHDL)
+-- Cosine Lookup Table for a given Theta
+
+LIBRARY IEEE;
+LIBRARY ALTERA_MF;
+LIBRARY LPM;
+
+USE IEEE.STD_LOGIC_1164.ALL;
+USE IEEE.STD_LOGIC_SIGNED.ALL;
+USE IEEE.NUMERIC_STD.ALL;
+USE ALTERA_MF.ALTERA_MF_COMPONENTS.ALL;
+USE LPM.LPM_COMPONENTS.ALL;
+
+ENTITY COS_LUT IS
+	PORT(
+		CLOCK    : IN STD_LOGIC; -- determines the update frequency of the odometry
+		RESETN   : IN STD_LOGIC; -- resets all internal registers
+		IO_WRITE : IN STD_LOGIC; -- signal from SCOMP
+		CS : IN   STD_LOGIC; -- chip-select 
+		IO_DATA  : INOUT STD_LOGIC_VECTOR(15 DOWNTO 0) -- SCOMP's IO bus lines
+	);
+END COS_LUT;
+
+ARCHITECTURE A OF COS_LUT IS
+	SIGNAL THETA, COS_THETA : STD_LOGIC_VECTOR(15 DOWNTO 0); -- angle, and LUT outputs
+	SIGNAL OUTDATA : STD_LOGIC_VECTOR(15 DOWNTO 0); -- register that SCOMP reads
+	SIGNAL READ_REQ, WR : STD_LOGIC;
+	
+	BEGIN
+	-- ALTSYNCRAM for look-up table (LUT).
+	COS_LUT : altsyncram
+	GENERIC MAP (
+		lpm_type => "altsyncram",
+		width_a => 16,
+		numwords_a => 2048,
+		widthad_a => 11,
+		init_file => "COS_table.mif",
+		intended_device_family => "Cyclone II",
+		lpm_hint => "ENABLE_RUNTIME_MOD=NO",
+		operation_mode => "ROM",
+		outdata_aclr_a => "NONE",
+		outdata_reg_a => "UNREGISTERED",
+		power_up_uninitialized => "FALSE"
+	)
+	PORT MAP (
+		clock0 => NOT(CLOCK),
+		address_a => THETA(10 DOWNTO 0), -- input is angle
+		q_a => COS_THETA -- output is cos(angle)
+	);
+	
+	-- LPM tri-state function to drive I/O bus
+	IO_BUS: LPM_BUSTRI
+	GENERIC MAP (
+		lpm_width => 16
+	)
+	PORT MAP (
+		data     => COS_THETA,  -- send this register
+		enabledt => READ_REQ, -- when SCOMP requests data
+		tridata  => IO_DATA
+	);
+	
+	
+	READ_REQ <= NOT(IO_WRITE) AND (CS);
+ 
+    
+    -- Write Theta
+    WR <= CS AND IO_WRITE;
+    
+	PROCESS (WR, RESETN)
+	BEGIN
+		IF RESETN = '0' THEN
+			THETA <= x"0000";
+		ELSIF RISING_EDGE(WR) THEN
+			THETA <= IO_DATA;
+		END IF;
+	END PROCESS;
+
+END A;
