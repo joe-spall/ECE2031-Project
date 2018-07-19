@@ -347,17 +347,18 @@ Forever:
 CTimer_ISR:				; Timer ISR. Used to call the position loop control as well as the motor control api
   LOAD	OK
   JPOS	STORETHETA
-  JZERO	MOVE
  
+
+MOVE:
+	CALL    ControlMovement  	; Control Movement API
+	RETI  		 			; return from ISR
+
+	
 STORETHETA:
 	CALL	PI_CNTRL 	; Calculate Heading Correction
 	LOAD	PI			; Load corrected heading
 	STORE	DTHETA		; Store into the Control Movement APIs heading SP
 	JUMP	MOVE
-MOVE:
-	CALL    ControlMovement  	; Control Movement API
-	RETI   			 			; return from ISR
-	
 
 ;***************************************************************
 ;* Movement API
