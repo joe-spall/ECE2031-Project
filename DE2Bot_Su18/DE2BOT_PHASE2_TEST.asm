@@ -100,8 +100,15 @@ Main:
 ;***************************************************************
 ;* Phase 2 Control Loop
 ;***************************************************************
-
+	LOAD   ZERO
+	STORE  DIST_CMD
+	STORE  DIST_ACT
+	STORE  ERR
+	STORE  DTHETA		; Initialize heading to zero
+	STORE  CUM_SUM		; Zero out the error accumulator
+	
 	CALL	WAIT1   	; Wait Two Seconds to give sonar readings time to stabilize
+	CALL	WAIT1
 	CALL	WAIT1
     
     IN		DIST0		; Read in initial distance to wall
@@ -109,21 +116,31 @@ Main:
 	
 	LOADI  225		   
 	STORE  DVel			; Initialize velocity to medium speed
-	LOADI  0
-	STORE  DTheta		; Initialize heading to zero
-	LOAD   ZERO
-	STORE  CUM_SUM		; Zero out the error accumulator
+
 
 Loop:					; Main Control Loop
 	IN 		THETA		; Take in current angular position
 	STORE	THETA_ACT   ; Store current angular position
 	IN		DIST0		; Read distance to left wall
 	STORE	DIST_ACT	; Store as current distance (possibly add running average and value filtering)	
-	IN     DIST2       	; Read distance from back wall
-	ADDI   -305        	; Subtract 1 ft in mm
-	JNEG   Die			; If the robot is within 1ft of the back wall --> Stop
+	IN     	DIST2       	; Read distance from back wall
+	ADDI   	-915        	; Subtract 1 ft in mm
+	JNEG   	Final			; If the robot is within 1ft of the back wall --> Stop
+	IN		DIST3
+	ADDI	-915
+	JNEG 	Final
 	JUMP  Loop			; Otherwise Loop
 
+Final:
+	LOAD 	DIST_CMD
+	STORE 	DIST_ACT
+	IN 		DIST2
+	ADDI 	-280
+	JNEG 	Die
+	IN		DIST3
+	ADDI 	-280
+	JNEG 	DIE
+	JUMP Final
 
 Die:					; This code is used to kill the robot at the end of the program	
 	CLI    &B1111      	; disable all interrupts
@@ -294,6 +311,7 @@ PI_CNTRL:
 	
 	LOAD	ZERO		; Negates the result of the controller (use if needed)
     SUB		PI
+    STORE	PI
     
 	RETURN 				; ADJUSTMENT IN AC
 
@@ -746,7 +764,7 @@ I2CError:
 ;***************************************************************
 Temp:     	DW 0 	; "Temp" is not a great name, but can be useful
 Ki:		  	DW 1	; Integral Constant Setpoint for the PI Controller (experimentally tuned for position tracking)
-Kp: 	  	DW 3	; Proportional Constant Setpoint for the PI Controller (experimentally tuned for position tracking)
+Kp: 	  	DW 2	; Proportional Constant Setpoint for the PI Controller (experimentally tuned for position tracking)
 DIST_WALL:	DW 0	;
 DIST:		DW 0	;
 CUM_SUM:	DW 0	; Cumulative sum of position error
