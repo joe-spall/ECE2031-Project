@@ -277,8 +277,8 @@ orientCCleanUp:
 	STORE	orientCDist3
 	LOAD	orientCDist2
 	SUB		orientCDist3
-	JPOS	orientCLeft
-	JNEG	orientCRight
+	ADDI	-10
+	JPOS	orientCRight
 	RETURN
 	
 orientCLeft:
