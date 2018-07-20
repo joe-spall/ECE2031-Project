@@ -119,9 +119,9 @@ End:
 orientInit:
 	LOAD	Mask5
 	OUT		SONAREN
-	LOAD 	DTheta
-	ADDI	60
-	STORE	DTheta
+; 	LOAD 	DTheta
+; 	ADDI	60
+; 	STORE	DTheta
 	CALL	Wait1
 	RETURN
 		
@@ -267,6 +267,30 @@ orientCCleanUp:
 	STORE	DTheta
 	CALL	Wait1
 	CALL 	Wait1
+	LOAD   	Sonar023       	   
+	OUT    	SONAREN     ; enable sonar 0, sonar 2, and sonar 3
+	CALL	WAIT1
+	CALL	WAIT1
+	IN		DIST2
+	STORE	orientCDist2
+	IN		DIST3
+	STORE	orientCDist3
+	LOAD	orientCDist2
+	SUB		orientCDist3
+	JPOS	orientCLeft
+	JNEG	orientCRight
+	RETURN
+	
+orientCLeft:
+	LOAD	DTheta
+	ADD		orientCDelt
+	LOAD	DTheta
+	RETURN
+
+orientCRight:
+	LOAD	DTheta
+	SUB		orientCDelt
+	LOAD	DTheta
 	RETURN
 
 
@@ -274,10 +298,10 @@ orientCCleanUp:
 ;* Phase 2 Control Loop
 ;***************************************************************
 Phase2:
-	LOAD   Sonar023       	   
-	OUT    SONAREN     ; enable sonar 0, sonar 2, and sonar 3
-	CALL	WAIT1
-	CALL	WAIT1
+; 	LOAD   Sonar023       	   
+; 	OUT    SONAREN     ; enable sonar 0, sonar 2, and sonar 3
+; 	CALL	WAIT1
+; 	CALL	WAIT1
 	LOAD   ZERO
 	OUT	   RESETPOS
 	STORE  DIST_CMD
@@ -982,6 +1006,10 @@ orientBSuccess: DW 0
 orientBStep:	DW 0
 orientBDelt1:	DW -12
 orientBDelt2:	DW -8
+
+orientCDist2:	DW	0
+orientCDist3:	DW  0
+orientCDelt:	DW	3
 
 OK:				DW	0
 
