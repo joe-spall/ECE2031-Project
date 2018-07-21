@@ -103,7 +103,6 @@ StartA:
 	CALL 	orientAInit	
 	LOAD	orientASuccess
 	JZERO	StartA
-	JNEG	End
 StartB:	
 	CALL	orientBInit
 	LOAD 	orientBSuccess
@@ -117,16 +116,23 @@ End:
 ;* Orient Init Section- Makes long rotations looking at sensor 5 to be in a valid range, stops if gone 360 deg and hasn't found
 ;***************************************************************
 orientInit:
-	LOAD	Mask5
+	LOAD	ZERO			; Zeroing out all variables from possible resets
+	STORE 	currDist5
+	STORE   currDist5B
+	STORE   currHeading
+	STORE   orientASuccess
+	STORE   orientBSuccess
+	STORE	OK
+	LOAD	Mask5			; Enables the sonar 5
 	OUT		SONAREN
-	CALL	Wait1
-	LOAD	DTheta
+	CALL	Wait1	
+	LOAD	DTheta			; Adds a 20 deg bump to allow the sensors to begin reading valid info
 	ADDI	20
 	STORE	DTheta
 	CALL	orientMoveWait
 	RETURN
 	
-orientMoveWait:
+orientMoveWait:				; Lets the movement code run until it reaches the set dtheta
 	IN		Theta
 	SUB 	DTheta
 	JZERO	Ret
@@ -167,8 +173,6 @@ orientAMove:
 	STORE  	DTheta      	; desired heading
 	CALL	orientMoveWait
 	JUMP	orientARun
-	STORE	orientASuccess
-	RETURN					; if gone through 360deg, just stop part A
 
 orientAShortMove:
 	LOAD	DTheta
@@ -184,43 +188,37 @@ orientAShortMove:
 	
 orientBInit: 
 	LOADI	0
-	STORE	orientBSuccess	; Resets success of orient b move
+	STORE	orientBSuccess		; Resets success of orient b move
 	JUMP	orientBMove1
-orientBCheck:
-	LOAD	orientBStep
-	JZERO	orientBMove1	; Rotates one direction if on step 1
-	ADDI	-1
-	JZERO	orientBMove2	; Rotates other direction if on step 2
-	JUMP	Die				; for some reason didn't leave, so just stop
 	
 orientBRun1:
-	IN		DIST5			; read sonar 5 distance
+	IN		DIST5				; read sonar 5 distance
 	OUT		SSEG1
-	STORE 	currDist5		; storing current distance
+	STORE 	currDist5			; storing current distance
 	SUB		orientBMaxDist5		
-	JPOS	orientBMoveReset1 ; above max, reset
+	JPOS	orientBMoveReset1 	; above max, reset
 	LOAD	currDist5		
 	SUB		orientBMinDist5
-	JNEG	orientBMoveReset1 ; below min, reset
+	JNEG	orientBMoveReset1 	; below min, reset
 	JUMP	orientBMove2
 	
 orientBRun2:
-	IN		DIST5			; read sonar 5 distance
+	IN		DIST5				; read sonar 5 distance
 	OUT		SSEG1
-	STORE 	currDist5		; storing current distance
+	STORE 	currDist5			; storing current distance
 	SUB		orientBMaxDist5		
-	JPOS	orientBMoveReset2 ; above max, reset 
+	JPOS	orientBMoveReset2 	; above max, reset 
 	LOAD	currDist5		
 	SUB		orientBMinDist5
-	JNEG	orientBMoveReset2 ; below min, reset
-	JUMP	orientBMoveSuccess ; Should be successfully orientated so correct orientation and leave
+	JNEG	orientBMoveReset2 	; below min, reset
+	JUMP	orientBMoveSuccess 	; Should be successfully orientated so correct orientation and leave
 					  
 orientBMove1: 
-	LOAD	Mask3			; LEDS to show in the orient B state
+	LOAD	Mask3				; LEDS to show in the orient B state
 	OUT		LEDS
 	LOAD 	DTheta
 	ADD 	orientBDelt1		; move before first check to see if any difference
-	STORE  	DTheta      	; desired heading
+	STORE  	DTheta      		; desired heading
 	CALL	orientMoveWait
 	CALL	Wait1
 	JUMP	orientBRun1
@@ -230,18 +228,18 @@ orientBMoveReset1:
 	OUT		LCD
 	LOAD 	DTheta
 	SUB 	orientBDelt1		; recenter to start orientation
-	STORE  	DTheta      	; desired heading
+	STORE  	DTheta      		; desired heading
 	CALL	orientMoveWait
 	LOADI	0
-	STORE	orientBSuccess	; Was not successful, so exit
+	STORE	orientBSuccess		; Was not successful, so exit
 	STORE	orientASuccess
 	RETURN
 	
 orientBMove2: 
-	LOAD	Mask4			; LEDS to show in the orient B state
+	LOAD	Mask4				; LEDS to show in the orient B state
 	OUT		LEDS
 	LOAD 	DTheta
-	ADD 	orientBDelt2		; call twice to make up for initial move
+	ADD 	orientBDelt2		; Rotates the check the other direction
 	STORE	DTheta
 	CALL	orientMoveWait
 ;	LOAD	DTheta
@@ -256,10 +254,10 @@ orientBMoveReset2:
 	OUT		LCD
 	LOAD 	DTheta
 	ADD 	orientBDelt1		; recenter to start orinetation
-	STORE  	DTheta      	; desired heading
+	STORE  	DTheta      		; desired heading
 	CALL	orientMoveWait
 	LOADI	0
-	STORE	orientBSuccess	; Was not successful, so exit
+	STORE	orientBSuccess		; Was not successful, so exit
 	STORE	orientASuccess
 	RETURN
 
@@ -268,10 +266,10 @@ orientBMoveSuccess:
 	OUT		LEDS
 	LOAD 	DTheta
 	ADD 	orientBDelt1		; recenter to start orinetation
-	STORE  	DTheta      	; desired heading
+	STORE  	DTheta      		; desired heading
 	CALL	orientMoveWait
 	LOADI	1
-	STORE	orientBSuccess	; Was successful, so exit
+	STORE	orientBSuccess		; Was successful, so exit
 	RETURN
 	
 ;***************************************************************
@@ -293,24 +291,36 @@ orientCCleanUp:
 ;* Phase 2 Control Loop
 ;***************************************************************
 Phase2:
-	LOAD   Sonar023       	   
-	OUT    SONAREN     ; enable sonar 0, sonar 2, and sonar 3
+	LOAD	ZERO			; Zeroing out variables after possible reset
+	STORE	DIST_WALL
+	STORE	DIST
+	STORE	CUM_SUM
+	STORE	DIST_ACT
+	STORE	THETA_ACT
+	STORE	DIST_CMD
+	STORE	ERR
+	STORE	P_CNTRL
+	STORE	I_CNTRL
+	STORE	PI
+	LOAD   	Sonar023       	   
+	OUT    	SONAREN     	; enable sonar 0, sonar 2, and sonar 3
 	CALL	WAIT1
 	CALL	WAIT1
 	
 FindLeftLoop:
-    IN		DIST0		; Read in initial distance to wall
+    IN		DIST0			; Read in initial distance to wall
     SUB		maxLeftDist
     JNEG	GoodLeft
     LOAD	DTHETA
     ADDI	2
     STORE	DTHETA
-    JUMP FindLeftLoop
+    CALL	orientMoveWait
+    JUMP 	FindLeftLoop	; Continue to rotate until a valid left wall setpoint is discovered
 GoodLeft:
 	ADD		maxLeftDist
 	STORE  	DIST_CMD		; Store this distance as the control setpoint for the PI controller
 	
-	LOAD   ZERO
+	LOAD   ZERO				; Begins initialization for the setpoints
 	OUT	   RESETPOS
 	STORE  DIST_CMD
 	STORE  DIST_ACT
@@ -325,13 +335,13 @@ GoodLeft:
 	STORE  	DVel			; Initialize velocity to medium speed
 
 
-Loop:					; Main Control Loop
-	IN 		THETA		; Take in current angular position
-	STORE	THETA_ACT   ; Store current angular position
-	IN		DIST0		; Read distance to left wall
-	STORE	DIST_ACT	; Store as current distance (possibly add running average and value filtering)
+Loop:						; Main Control Loop
+	IN 		THETA			; Take in current angular position
+	STORE	THETA_ACT   	; Store current angular position
+	IN		DIST0			; Read distance to left wall
+	STORE	DIST_ACT		; Store as current distance (possibly add running average and value filtering)
 	IN     	DIST2       	; Read distance from back wall
-	SUB		distToWall        	; Subtract 1 ft in mm
+	SUB		distToWall      ; Subtract 1 ft in mm
 	
 	JNEG   	Final			; If the robot is within 1ft of the back wall --> Stop
 	IN		DIST3
@@ -352,9 +362,11 @@ Final:
 	JNEG 	Wall
 	JUMP 	Final
 	
-Wall:
+Wall:					; When the wall is close, stop moving and run the beep
 	LOADI	0
 	STORE	DVel
+	OUT		LVELCMD
+	OUT		RVELCMD
 	LOADI	-92
 	OUT	   	BEEP
 	CALL   	WAIT1
@@ -983,46 +995,58 @@ I2CError:
 ;***************************************************************
 ;* Variables
 ;***************************************************************
-Temp:     	DW 0 	; "Temp" is not a great name, but can be useful
-Ki:		  	DW 1	; Integral Constant Setpoint for the PI Controller (experimentally tuned for position tracking)
-Kp: 	  	DW 2	; Proportional Constant Setpoint for the PI Controller (experimentally tuned for position tracking)
-DIST_WALL:	DW 0	;
-DIST:		DW 0	;
-CUM_SUM:	DW 0	; Cumulative sum of position error
-DIST_ACT:	DW 0	; Current Distance to left Wall (Sonar 0)
-THETA_ACT:	DW 0 	; Current heading angle (from odometry)
-DIST_CMD:	DW 0 	; SP for the PI Controller
-ERR:		DW 0 	; Position Error
-P_CNTRL:	DW 0 	; Proportional Control Term of the PI Controller
-I_CNTRL:	DW 0 	; Integral Control Term of the PI Controller
-PI:			DW 0	; PI Controller Output - Heading Correction
-Sonar023:   DW &B00001101
+Temp:     			DW 0 	; "Temp" is not a great name, but can be useful
 
-distToWall:	DW	1220
-maxLeftDist: 	DW	3050
+;Orient
+
+currDist5:			DW 0
+currDist5B:			DW 0
+currHeading:		DW 0
+
+orientASuccess:		DW 0
+orientBSuccess: 	DW 0
+
+OK:					DW 0
+
+;Traverse
+DIST_WALL:			DW 0	;
+DIST:				DW 0	;
+CUM_SUM:			DW 0	; Cumulative sum of position error
+DIST_ACT:			DW 0	; Current Distance to left Wall (Sonar 0)
+THETA_ACT:			DW 0 	; Current heading angle (from odometry)
+DIST_CMD:			DW 0 	; SP for the PI Controller
+ERR:				DW 0 	; Position Error
+P_CNTRL:			DW 0 	; Proportional Control Term of the PI Controller
+I_CNTRL:			DW 0 	; Integral Control Term of the PI Controller
+PI:					DW 0	; PI Controller Output - Heading Correction
+
+;***************************************************************
+;* Constants
+;***************************************************************
+; Orient
+
+maxDist5:			DW 4854
+minDist5:			DW 4100
+orientADelt: 		DW 10
+orientADelt2: 		DW 5
+
+orientBMaxDist5:	DW 5000
+orientBMinDist5:	DW 4200
+orientBDelt1:		DW -10
+orientBDelt2:		DW 20
+
+; Traverse
 
 
-currDist5:		DW 0
-currDist5B:		DW 0
-currHeading:	DW 0
-maxDist5:		DW 4854
-minDist5:		DW 4100
-orientADelt: 	DW 10
-orientADelt2: 	DW 5
-orientASuccess:	DW 0
+Sonar023:   		DW &B00001101
+distToWall:			DW 1220
+maxLeftDist: 		DW 3050
 
-orientBSuccess: DW 0
-orientBStep:	DW 0
-orientBMaxDist5: DW 5000
-orientBMinDist5: DW 4200
-orientBDelt1:	DW -12
-orientBDelt2:	DW  24
+Ki:		  			DW 1	; Integral Constant Setpoint for the PI Controller (experimentally tuned for position tracking)
+Kp: 	  			DW 2	; Proportional Constant Setpoint for the PI Controller (experimentally tuned for position tracking)
 
-orientCDist2:	DW	0
-orientCDist3:	DW  0
-orientCDelt:	DW	3
 
-OK:				DW	0
+
 
 
 ;***************************************************************
