@@ -133,16 +133,17 @@ orientInit:
 	RETURN
 	
 orientMoveWait:				; Lets the movement code run until it reaches the set dtheta
-	IN		Theta
-	SUB 	DTheta
-	JZERO	Ret
-	ADDI	2
-	JZERO	Ret
-	ADDI 	-4
-	JZERO	Ret
-	JUMP	orientMoveWait
+; 	IN		Theta
+; 	SUB 	DTheta
+; 	JZERO	Ret
+; 	ADDI	2
+; 	JZERO	Ret
+; 	ADDI 	-4
+; 	JZERO	Ret
+; 	JUMP	orientMoveWait
 Ret:
-	CALL	Wait1	
+;	CALL	Wait1	
+	CALL	Wait1
 	RETURN
 		
 ;***************************************************************
@@ -291,34 +292,23 @@ orientCCleanUp:
 ;* Phase 2 Control Loop
 ;***************************************************************
 Phase2:
-	LOAD	ZERO			; Zeroing out variables after possible reset
-	STORE	DIST_WALL
-	STORE	DIST
-	STORE	CUM_SUM
-	STORE	DIST_ACT
-	STORE	THETA_ACT
-	STORE	DIST_CMD
-	STORE	ERR
-	STORE	P_CNTRL
-	STORE	I_CNTRL
-	STORE	PI
 	LOAD   	Sonar023       	   
 	OUT    	SONAREN     	; enable sonar 0, sonar 2, and sonar 3
 	CALL	WAIT1
 	CALL	WAIT1
 	
 FindLeftLoop:
-    IN		DIST0			; Read in initial distance to wall
-    SUB		maxLeftDist
-    JNEG	GoodLeft
-    LOAD	DTHETA
-    ADDI	2
-    STORE	DTHETA
-    CALL	orientMoveWait
-    JUMP 	FindLeftLoop	; Continue to rotate until a valid left wall setpoint is discovered
-GoodLeft:
-	ADD		maxLeftDist
-	STORE  	DIST_CMD		; Store this distance as the control setpoint for the PI controller
+;     IN		DIST0			; Read in initial distance to wall
+; ;    SUB		maxLeftDist
+; ;     JNEG	GoodLeft
+; ;     LOAD	DTHETA
+; ;     ADDI	2
+; ;     STORE	DTHETA
+; ;     CALL	orientMoveWait
+; ;     JUMP 	FindLeftLoop	; Continue to rotate until a valid left wall setpoint is discovered
+; GoodLeft:
+; ;	ADD		maxLeftDist
+; 	STORE  	DIST_CMD		; Store this distance as the control setpoint for the PI controller
 	
 	LOAD   ZERO				; Begins initialization for the setpoints
 	OUT	   RESETPOS
@@ -328,8 +318,17 @@ GoodLeft:
 	STORE  DTHETA		; Initialize heading to zero
 	STORE  CUM_SUM		; Zero out the error accumulator
 	
+	
+	
 	LOADI	1
 	STORE	OK
+	
+	CALL	WAIT1
+	CALL	WAIT1
+	CALL	WAIT1
+	
+	IN		DIST0
+	STORE	DIST_CMD
 	
 	LOADI  	225		   
 	STORE  	DVel			; Initialize velocity to medium speed
@@ -341,10 +340,11 @@ Loop:						; Main Control Loop
 	IN		DIST0			; Read distance to left wall
 	STORE	DIST_ACT		; Store as current distance (possibly add running average and value filtering)
 	IN     	DIST2       	; Read distance from back wall
+	OUT		SSEG1
 	SUB		distToWall      ; Subtract 1 ft in mm
-	
 	JNEG   	Final			; If the robot is within 1ft of the back wall --> Stop
 	IN		DIST3
+	OUT		SSEG2
 	SUB		distToWall
 	JNEG 	Final
 	JUMP  	Loop			; Otherwise Loop
@@ -1032,15 +1032,15 @@ orientADelt2: 		DW 5
 
 orientBMaxDist5:	DW 5000
 orientBMinDist5:	DW 4200
-orientBDelt1:		DW -10
+orientBDelt1:		DW -8
 orientBDelt2:		DW 20
 
 ; Traverse
 
 
 Sonar023:   		DW &B00001101
-distToWall:			DW 1220
-maxLeftDist: 		DW 3050
+distToWall:			DW 1500
+;maxLeftDist: 		DW 3050
 
 Ki:		  			DW 1	; Integral Constant Setpoint for the PI Controller (experimentally tuned for position tracking)
 Kp: 	  			DW 2	; Proportional Constant Setpoint for the PI Controller (experimentally tuned for position tracking)
