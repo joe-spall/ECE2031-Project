@@ -142,7 +142,7 @@ orientMoveWait:				; Lets the movement code run until it reaches the set dtheta
 ; 	JZERO	Ret
 ; 	JUMP	orientMoveWait
 Ret:
-;	CALL	Wait1	
+	CALL	Wait1
 	CALL	Wait1
 	RETURN
 		
@@ -154,6 +154,8 @@ orientAInit:
 	LOAD 	Mask2			; LEDS to show in the orient A state
 	OUT		LEDS
 	LOADI	0
+	STORE	currDist5
+	STORE	currDist5B
 	STORE	orientASuccess
 orientARun:
 	IN		DIST5			; read sonar 5 distance
@@ -172,7 +174,8 @@ orientAMove:
 	LOAD	DTheta
 	ADD 	orientADelt		; load amount of move per step
 	STORE  	DTheta      	; desired heading
-	CALL	orientMoveWait
+	CALL	Wait1
+	;CALL	orientMoveWait
 	JUMP	orientARun
 
 orientAShortMove:
@@ -189,29 +192,42 @@ orientAShortMove:
 	
 orientBInit: 
 	LOADI	0
+	STORE	currDist5B
 	STORE	orientBSuccess		; Resets success of orient b move
 	JUMP	orientBMove1
 	
 orientBRun1:
 	IN		DIST5				; read sonar 5 distance
 	OUT		SSEG1
-	STORE 	currDist5			; storing current distance
+	STORE 	currDist5B			; storing current distance
 	SUB		orientBMaxDist5		
 	JPOS	orientBMoveReset1 	; above max, reset
-	LOAD	currDist5		
+	LOAD	currDist5B		
 	SUB		orientBMinDist5
 	JNEG	orientBMoveReset1 	; below min, reset
+	LOAD	currDist5			; If the change is too big, don't do that
+	SUB		currDist5B
+	CALL	abs
+	OUT		SSEG2
+	SUB		currCheck
+	JPOS	orientBMoveReset1
 	JUMP	orientBMove2
 	
 orientBRun2:
 	IN		DIST5				; read sonar 5 distance
 	OUT		SSEG1
-	STORE 	currDist5			; storing current distance
+	STORE 	currDist5B			; storing current distance
 	SUB		orientBMaxDist5		
 	JPOS	orientBMoveReset2 	; above max, reset 
-	LOAD	currDist5		
+	LOAD	currDist5B		
 	SUB		orientBMinDist5
 	JNEG	orientBMoveReset2 	; below min, reset
+	LOAD	currDist5			; If the change is too big, don't do that
+	SUB		currDist5B
+	CALL	abs
+	OUT		SSEG2
+	SUB		currCheck
+	JPOS	orientBMoveReset2
 	JUMP	orientBMoveSuccess 	; Should be successfully orientated so correct orientation and leave
 					  
 orientBMove1: 
@@ -242,7 +258,7 @@ orientBMove2:
 	LOAD 	DTheta
 	ADD 	orientBDelt2		; Rotates the check the other direction
 	STORE	DTheta
-	CALL	orientMoveWait
+	;CALL	orientMoveWait
 ;	LOAD	DTheta
 ;	SUB		orientBDelt2
 ;	STORE	DTheta
@@ -298,16 +314,17 @@ Phase2:
 	CALL	WAIT1
 	
 FindLeftLoop:
-;     IN		DIST0			; Read in initial distance to wall
-; ;    SUB		maxLeftDist
-; ;     JNEG	GoodLeft
-; ;     LOAD	DTHETA
-; ;     ADDI	2
-; ;     STORE	DTHETA
-; ;     CALL	orientMoveWait
-; ;     JUMP 	FindLeftLoop	; Continue to rotate until a valid left wall setpoint is discovered
-; GoodLeft:
-; ;	ADD		maxLeftDist
+    IN		DIST0			; Read in initial distance to wall
+    SUB		maxLeftDist
+    JNEG	GoodLeft
+    LOAD	DTHETA
+    ADDI	2
+    STORE	DTHETA
+    CALL	Wait1
+;      CALL	orientMoveWait
+;      JUMP 	FindLeftLoop	; Continue to rotate until a valid left wall setpoint is discovered
+ GoodLeft:
+; 	ADD		maxLeftDist
 ; 	STORE  	DIST_CMD		; Store this distance as the control setpoint for the PI controller
 	
 	LOAD   ZERO				; Begins initialization for the setpoints
@@ -1003,6 +1020,8 @@ currDist5:			DW 0
 currDist5B:			DW 0
 currHeading:		DW 0
 
+
+
 orientASuccess:		DW 0
 orientBSuccess: 	DW 0
 
@@ -1035,12 +1054,14 @@ orientBMinDist5:	DW 4200
 orientBDelt1:		DW -8
 orientBDelt2:		DW 20
 
+currCheck:			DW 20
+
 ; Traverse
 
 
 Sonar023:   		DW &B00001101
 distToWall:			DW 1500
-;maxLeftDist: 		DW 3050
+maxLeftDist: 		DW 3050
 
 Ki:		  			DW 1	; Integral Constant Setpoint for the PI Controller (experimentally tuned for position tracking)
 Kp: 	  			DW 2	; Proportional Constant Setpoint for the PI Controller (experimentally tuned for position tracking)
