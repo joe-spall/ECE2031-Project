@@ -314,26 +314,24 @@ Phase2:
 	CALL	WAIT1
 	
 FindLeftLoop:
+;;Test code
     IN		DIST0			; Read in initial distance to wall
+    OUT		LCD
     SUB		maxLeftDist
     JNEG	GoodLeft
     LOAD	DTHETA
-    ADDI	2
+    ADDI	-10
     STORE	DTHETA
     CALL	Wait1
-;      CALL	orientMoveWait
-;      JUMP 	FindLeftLoop	; Continue to rotate until a valid left wall setpoint is discovered
- GoodLeft:
-; 	ADD		maxLeftDist
-; 	STORE  	DIST_CMD		; Store this distance as the control setpoint for the PI controller
-	
-	LOAD   ZERO				; Begins initialization for the setpoints
-	OUT	   RESETPOS
-	STORE  DIST_CMD
-	STORE  DIST_ACT
-	STORE  ERR
-	STORE  DTHETA		; Initialize heading to zero
-	STORE  CUM_SUM		; Zero out the error accumulator
+;;Test code
+GoodLeft:
+	LOAD   	ZERO				; Begins initialization for the setpoints
+	OUT	   	RESETPOS
+	STORE  	DIST_CMD
+	STORE  	DIST_ACT
+	STORE  	ERR
+	STORE  	DTHETA		; Initialize heading to zero
+	STORE  	CUM_SUM		; Zero out the error accumulator
 	
 	
 	
@@ -354,8 +352,16 @@ FindLeftLoop:
 Loop:						; Main Control Loop
 	IN 		THETA			; Take in current angular position
 	STORE	THETA_ACT   	; Store current angular position
+	;; TEST CODE
+	LOAD	DIST_ACT
+	STORE	DIST_LAST
 	IN		DIST0			; Read distance to left wall
 	STORE	DIST_ACT		; Store as current distance (possibly add running average and value filtering)
+	SUB		DIST_LAST
+	ADDI	-700
+	JPOS	Final
+	JZERO	Final
+	;;
 	IN     	DIST2       	; Read distance from back wall
 	OUT		SSEG1
 	SUB		distToWall      ; Subtract 1 ft in mm
@@ -1038,6 +1044,7 @@ ERR:				DW 0 	; Position Error
 P_CNTRL:			DW 0 	; Proportional Control Term of the PI Controller
 I_CNTRL:			DW 0 	; Integral Control Term of the PI Controller
 PI:					DW 0	; PI Controller Output - Heading Correction
+DIST_LAST:			DW 0
 
 ;***************************************************************
 ;* Constants
@@ -1052,9 +1059,9 @@ orientADelt2: 		DW 5
 orientBMaxDist5:	DW 5000
 orientBMinDist5:	DW 4200
 orientBDelt1:		DW -8
-orientBDelt2:		DW 20
+orientBDelt2:		DW 16
 
-currCheck:			DW 20
+currCheck:			DW 100
 
 ; Traverse
 
