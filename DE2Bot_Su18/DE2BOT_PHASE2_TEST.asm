@@ -127,7 +127,7 @@ orientInit:
 	OUT		SONAREN
 	CALL	Wait1	
 	LOAD	DTheta			; Adds a 20 deg bump to allow the sensors to begin reading valid info
-	ADDI	20
+	ADDI	43
 	STORE	DTheta
 	CALL	orientMoveWait
 	RETURN
@@ -205,12 +205,12 @@ orientBRun1:
 	LOAD	currDist5B		
 	SUB		orientBMinDist5
 	JNEG	orientBMoveReset1 	; below min, reset
-	LOAD	currDist5			; If the change is too big, don't do that
-	SUB		currDist5B
-	CALL	abs
-	OUT		SSEG2
-	SUB		currCheck
-	JPOS	orientBMoveReset1
+; 	LOAD	currDist5			; If the change is too big, don't do that
+; 	SUB		currDist5B
+; 	CALL	abs
+; 	OUT		SSEG2
+; 	SUB		currCheck
+; 	JPOS	orientBMoveReset1
 	JUMP	orientBMove2
 	
 orientBRun2:
@@ -222,12 +222,12 @@ orientBRun2:
 	LOAD	currDist5B		
 	SUB		orientBMinDist5
 	JNEG	orientBMoveReset2 	; below min, reset
-	LOAD	currDist5			; If the change is too big, don't do that
-	SUB		currDist5B
-	CALL	abs
-	OUT		SSEG2
-	SUB		currCheck
-	JPOS	orientBMoveReset2
+; 	LOAD	currDist5			; If the change is too big, don't do that
+; 	SUB		currDist5B
+; 	CALL	abs
+; 	OUT		SSEG2
+; 	SUB		currCheck
+; 	JPOS	orientBMoveReset2
 	JUMP	orientBMoveSuccess 	; Should be successfully orientated so correct orientation and leave
 					  
 orientBMove1: 
@@ -250,6 +250,7 @@ orientBMoveReset1:
 	LOADI	0
 	STORE	orientBSuccess		; Was not successful, so exit
 	STORE	orientASuccess
+
 	RETURN
 	
 orientBMove2: 
@@ -262,7 +263,7 @@ orientBMove2:
 ;	LOAD	DTheta
 ;	SUB		orientBDelt2
 ;	STORE	DTheta
-;	CALL	orientMoveWait
+	CALL	orientMoveWait
 	CALL	Wait1
 	JUMP	orientBRun2
 
@@ -308,25 +309,28 @@ orientCCleanUp:
 ;* Phase 2 Control Loop
 ;***************************************************************
 Phase2:
-	LOAD   	Sonar023       	   
+;	LOAD   	Sonar023 
+	LOAD	Mask0      	   
 	OUT    	SONAREN     	; enable sonar 0, sonar 2, and sonar 3
 	CALL	WAIT1
 	CALL	WAIT1
 	
-FindLeftLoop:
-;;Test code
-    IN		DIST0			; Read in initial distance to wall
-    OUT		LCD
-    SUB		maxLeftDist
-    JNEG	GoodLeft
-    LOAD	DTHETA
-    ADDI	-10
-    STORE	DTHETA
-    CALL	Wait1
-;;Test code
+; FindLeftLoop:
+; ;;Test code
+;     IN		DIST0			; Read in initial distance to wall
+;     OUT		LCD
+;     SUB		maxLeftDist
+;     JNEG	GoodLeft
+;     LOAD	DTHETA
+;     ADDI	-10
+;     STORE	DTHETA
+;     CALL	Wait1
+;     CALL	Wait1
+; ;;Test code
 GoodLeft:
 	LOAD   	ZERO				; Begins initialization for the setpoints
 	OUT	   	RESETPOS
+	LOAD	ZERO
 	STORE  	DIST_CMD
 	STORE  	DIST_ACT
 	STORE  	ERR
@@ -335,8 +339,7 @@ GoodLeft:
 	
 	
 	
-	LOADI	1
-	STORE	OK
+	
 	
 	CALL	WAIT1
 	CALL	WAIT1
@@ -347,6 +350,9 @@ GoodLeft:
 	
 	LOADI  	225		   
 	STORE  	DVel			; Initialize velocity to medium speed
+	
+	LOADI	1
+	STORE	OK
 
 
 Loop:						; Main Control Loop
@@ -357,40 +363,40 @@ Loop:						; Main Control Loop
 	STORE	DIST_LAST
 	IN		DIST0			; Read distance to left wall
 	STORE	DIST_ACT		; Store as current distance (possibly add running average and value filtering)
-	SUB		DIST_LAST
-	ADDI	-700
-	JPOS	Final
-	JZERO	Final
+	LOAD	DIST_LAST
+	SUB		DIST_ACT
+	ADDI	-400
+	JPOS	Wall
+	JZERO	Wall
 	;;
-	IN     	DIST2       	; Read distance from back wall
-	OUT		SSEG1
-	SUB		distToWall      ; Subtract 1 ft in mm
-	JNEG   	Final			; If the robot is within 1ft of the back wall --> Stop
-	IN		DIST3
-	OUT		SSEG2
-	SUB		distToWall
-	JNEG 	Final
+; 	IN     	DIST2       	; Read distance from back wall
+; 	OUT		SSEG1
+; 	SUB		distToWall      ; Subtract 1 ft in mm
+; 	JNEG   	Die			; If the robot is within 1ft of the back wall --> Stop
+; 	IN		DIST3
+; 	OUT		SSEG2
+; 	SUB		distToWall
+; 	JNEG 	Die
 	JUMP  	Loop			; Otherwise Loop
 
-Final:
-	LOADI 	&H1738
-	OUT		LCD
-	LOAD 	DIST_CMD
-	STORE 	DIST_ACT
-	IN 		DIST2
-	ADDI 	-280
-	JNEG 	Wall
-	IN		DIST3
-	ADDI 	-280
-	JNEG 	Wall
-	JUMP 	Final
+Wall:
+	LOADI	0
+	STORE	OK
+	LOADI	170
+	STORE	DVel
+	CALL 	Wait1
+	CALL	Wait1
 	
-Wall:					; When the wall is close, stop moving and run the beep
+	
+Wall2:					; When the wall is close, stop moving and run the beep
+	
+	;CALL	Wait1
+	;CALL	Wait1
 	LOADI	0
 	STORE	DVel
 	OUT		LVELCMD
 	OUT		RVELCMD
-	LOADI	-92
+	LOADI   -92
 	OUT	   	BEEP
 	CALL   	WAIT1
 	OUT	   	BEEP
@@ -567,8 +573,21 @@ PI_CNTRL:
 	LOAD	ZERO		; Negates the result of the controller (use if needed)
     SUB		PI
     STORE	PI
+    RETURN
+;     
+;     LOAD	PI
+;     SUB		15
+;     JPOS	CLAMP5
+;     
+; PIEND:    
+;     RETURN
+;     
+; CLAMP5:
+;     LOADI	0
+;     STORE   PI	
+;     JUMP	PIEND
     
-	RETURN 				; ADJUSTMENT IN AC
+	
 
 ;*******************************************************************************
 ; Mod360: modulo 360
@@ -1051,9 +1070,9 @@ DIST_LAST:			DW 0
 ;***************************************************************
 ; Orient
 
-maxDist5:			DW 4854
+maxDist5:			DW 4950
 minDist5:			DW 4100
-orientADelt: 		DW 10
+orientADelt: 		DW 8
 orientADelt2: 		DW 5
 
 orientBMaxDist5:	DW 5000
